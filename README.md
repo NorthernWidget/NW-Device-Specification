@@ -430,6 +430,34 @@ No Page 2. Battery curve coefficients and Steinhart–Hart thermistor constants 
 
 ---
 
+## I²C address registry
+
+All NW device addresses, current and proposed. Proposed addresses follow an ASCII-mnemonic scheme: the primary address equals the ASCII code of the device's initial letter, making addresses human-readable in a hex dump. Secondary addresses (for devices that must coexist in pairs on the same bus) use the next ASCII character.
+
+Controller-only devices (Margay, Okapi) have no current peripheral address; entries are reserved for hypothetical future peripheral interfaces.
+
+| Device | Type | Current address(es) | Proposed (Schema 1) | Mnemonic | Notes |
+|--------|------|---------------------|---------------------|----------|-------|
+| Apis | Peripheral | `0x50` (primary) | `0x41` | `'A'` | ⚠ Proposed `0x41` clashes with Libelle DOWN (current) |
+| Haar | Peripheral | `0x42` (primary) | `0x48` | `'H'` | `0x48` is common for ADS1115; no NW-device conflict |
+| Libelle | Peripheral | `0x40` UP, `0x41` DOWN | `0x4C` UP, TBD DOWN | `'L'` | Hardware solder jumper; DOWN address TBD — `0x4D` = Margay clash |
+| Margay | Controller (hypothetical) | — | `0x4D` | `'M'` | **Reserved.** Controller only; no peripheral interface yet |
+| Okapi | Controller (hypothetical) | — | `0x4F` | `'O'` | **Reserved.** Controller only; no peripheral interface yet |
+| Walrus | Peripheral | `0x4D` primary, `0x41` alt | `0x57`, `0x58` | `'W'`, `'X'` | ⚠ Current `0x4D` must change — clashes with proposed Margay |
+
+### Clashes requiring resolution
+
+1. **Walrus `0x4D` → Margay `'M'` = `0x4D`:** Walrus must migrate to `0x57` (`'W'`) in Schema 1. This is a breaking change to existing deployments.
+
+2. **Libelle DOWN `0x41` → Apis `'A'` = `0x41`:** These conflict. Resolution options:
+   - Keep Libelle at `0x40`/`0x41` (hardware-set by solder jumper; no PCB change needed) and assign Apis a different address.
+   - Move Libelle to `0x4C`/? in a future hardware revision and free `0x41` for Apis.
+   - Libelle DOWN Schema 1 secondary address is deferred until this is resolved.
+
+3. **Libelle DOWN Schema 1 address:** Cannot be `0x4D` (Margay). If Libelle moves to the mnemonic scheme, `'L'+1` = `0x4D` is unavailable. Candidate: keep Libelle UP at `0x4C` and assign DOWN by bit-flip or a non-sequential scheme. **Unresolved.**
+
+---
+
 ## License
 
 This specification is released under the [Creative Commons Attribution-ShareAlike 4.0 International License](LICENSE) (CC BY-SA 4.0).
