@@ -115,6 +115,36 @@ The schema byte (Page 0, address 0x00) declares which pages a device exposes.
 
 ---
 
+## Physical EEPROM layout
+
+### Page 0
+
+Page 0 is stored at the **top of EEPROM**: `EEPROM[length−32]` through `EEPROM[length−1]`. This placement protects identity data from accidental overwrite by any code that writes EEPROM sequentially from address 0 — a common pattern in both user sketches (on logger devices) and firmware bugs (on any device).
+
+The byte index within Page 0 maps directly to the I²C register offset:
+
+```cpp
+#define PAGE0_BASE  (EEPROM.length() - 32)
+
+// Read byte at I²C register offset i (0x00–0x1F):
+EEPROM.read(PAGE0_BASE + i)
+
+// Examples:
+EEPROM.read(PAGE0_BASE + 0x00)  // Schema byte
+EEPROM.read(PAGE0_BASE + 0x1E)  // CRC-8
+EEPROM.read(PAGE0_BASE + 0x1F)  // I²C address
+```
+
+Page 0 is written once at manufacture by a dedicated programmer sketch. Production firmware never writes to `EEPROM[length−32]` or above. The CRC-8 at offset 0x1E provides integrity verification on every boot.
+
+### Page 2
+
+Page 2 EEPROM placement is **not yet decided**. Considerations differ from Page 0: calibration data may be written in the field, updated per deployment, or re-calibrated by a user. Placement will be specified once the write-pattern requirements are better understood across devices.
+
+Device-specific EEPROM usage (outside Pages 0 and 2) must stay **below** `EEPROM[length−32]`.
+
+---
+
 ## Transport
 
 This specification is transport-agnostic. The 32-byte page layout is a data structure; the physical layer is separate.
