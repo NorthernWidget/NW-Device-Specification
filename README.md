@@ -5,7 +5,7 @@
 
 A transport-agnostic specification for embedded device identity, communication, and data exchange on shared buses. Designed for low-power environmental sensors and data loggers, but applicable to any device that can expose a byte-addressable address space.
 
-The specification defines how a device presents itself — what it is, what version it runs, what it measures — so that a host (logger, microcontroller, or any master) can discover and interact with it automatically, without prior knowledge of the specific device.
+The specification defines how a device presents itself — what it is, what version it runs, what it measures — so that a host (logger, microcontroller, or any I²C controller) can discover and interact with it automatically, without prior knowledge of the specific device.
 
 ---
 
@@ -92,15 +92,15 @@ The full specification, described in detail in the sections that follow.
 
 - **Transport-agnostic.** The specification defines a virtual byte-addressable address space. I2C, RS-485, SPI, or any byte-serial transport may carry it.
 - **Fixed 32-byte pages.** Pages are the atomic read unit. 32 bytes is the lowest-common-denominator single-transaction read on stock Arduino hardware (Wire buffer limit). Fixed page size means fixed offsets, no parser, no seek — a corrupt byte damages only its own field.
-- **Auto-discovery.** A master scans addresses, reads 8 bytes (Block 0 of Page 0), and immediately knows whether a device is NW-schema-compliant and what it is. No prior knowledge required.
-- **Layered.** A master that only needs identity reads Page 0. A master that needs measurements reads Page 1. Future schemas add pages; old masters ignore pages they don't know.
+- **Auto-discovery.** A controller scans addresses, reads 8 bytes (Block 0 of Page 0), and immediately knows whether a device is NW-schema-compliant and what it is. No prior knowledge required.
+- **Layered.** A controller that only needs identity reads Page 0. A controller that needs measurements reads Page 1. Future schemas add pages; old controllers ignore pages they don't know.
 - **No central registrar.** Device identity is established by a 7-byte ASCII name at a fixed address. A central manufacturer ID registry is not required.
 
 ---
 
 ## Address space
 
-The device exposes a flat, byte-addressable virtual address space. The master writes a starting address, then reads N bytes (maximum 32 per transaction). The device increments the address pointer with each byte returned.
+The device exposes a flat, byte-addressable virtual address space. The controller writes a starting address, then reads N bytes (maximum 32 per transaction). The device increments the address pointer with each byte returned.
 
 Pages are 32-byte aligned:
 
@@ -130,7 +130,7 @@ Address  Field   Size  Contents
   –0x07
 ```
 
-The schema byte at 0x00 is the first thing a master reads. A value of 0x01 indicates compliance with this specification. Any other value (including 0x00, the Margay legacy schema, or 0xFF, unprogrammed EEPROM) means the device does not implement Schema 1.
+The schema byte at 0x00 is the first thing a controller reads. A value of 0x01 indicates compliance with this specification. Any other value (including 0x00, the Margay legacy schema, or 0xFF, unprogrammed EEPROM) means the device does not implement Schema 1.
 
 The 7-byte name field accommodates all current Northern Widget device names without truncation. A fixed-position name at a fixed address gives negligible collision probability with non-compliant devices; no manufacturer prefix is required.
 
@@ -179,7 +179,7 @@ Address  Field       Size  Contents
   0x1D   Magic byte  1 B   Reserved; candidate use: fixed NW marker byte as an
                            additional integrity check alongside the CRC. Purpose
                            and value TBD. Write as 0x00 until standardised.
-  0x1E   CRC         1 B   CRC-8 of bytes 0x00–0x1D. Allows a master to detect
+  0x1E   CRC         1 B   CRC-8 of bytes 0x00–0x1D. Allows a controller to detect
                            EEPROM corruption before acting on identity data.
   0x1F   I2C address 1 B   Writable. The device's current I2C address, persisted
                            to EEPROM. Takes effect on next boot. Falls back to
@@ -200,7 +200,7 @@ Bit  Meaning
 1–7  Device-specific failure flags (0 = nominal)
 ```
 
-A master reads all 32 bytes of Page 1 in one transaction. The status byte is checked first; if bit 0 is clear, the remaining bytes are stale and should not be used.
+A controller reads all 32 bytes of Page 1 in one transaction. The status byte is checked first; if bit 0 is clear, the remaining bytes are stale and should not be used.
 
 Sensor-specific layouts for Page 1 are defined in per-device appendices.
 
@@ -208,7 +208,7 @@ Sensor-specific layouts for Page 1 are defined in per-device appendices.
 
 ## Page 2 — Calibration
 
-32 bytes, persistent (EEPROM-backed). Written at calibration time; read by a master that wishes to verify or update calibration state. Device-specific; defined per device type.
+32 bytes, persistent (EEPROM-backed). Written at calibration time; read by a controller that wishes to verify or update calibration state. Device-specific; defined per device type.
 
 ---
 
@@ -219,7 +219,7 @@ This specification was designed with awareness of the following existing standar
 - **IEEE 1451 / TEDS** — the closest philosophical precedent: smart-transducer self-identification, an EEPROM-resident identity block, and media independence. This specification differs in being open and unencumbered (IEEE 1451 is paywalled), using a flat byte map rather than bit-packed templates, and co-locating runtime data with identity rather than separating them entirely.
 - **I2C Device ID** (reserved address 0xF8) — the closest base-I2C primitive: a 3-byte identifier (12-bit manufacturer / 9-bit part / 3-bit revision). This specification extends that concept to a full identity page.
 - **SMBus ARP and UDID** — bus-native device discovery and dynamic address assignment, analogous to the writable address register at 0x1F. Widely considered heavyweight; this specification offers a lighter scan-and-read alternative.
-- **IPMI FRU** — structural reference for area-based versioning and extensibility. This specification borrows the extensibility philosophy (schema versioning allows old masters to skip unknown pages) but rejects FRU's variable-length offset-chained block structure in favour of fixed-position fields.
+- **IPMI FRU** — structural reference for area-based versioning and extensibility. This specification borrows the extensibility philosophy (schema versioning allows old controllers to skip unknown pages) but rejects FRU's variable-length offset-chained block structure in favour of fixed-position fields.
 - **JEDEC SPD** — fixed-byte-map-in-EEPROM-over-SMBus, the closest historical precedent for Page 0.
 - **Adafruit STEMMA QT / SparkFun Qwiic** — these ecosystems standardised I2C connectors and voltage levels but not device identity or discovery. Devices in these ecosystems are identified by fixed I2C address, chip-specific WHO_AM_I registers, and human-maintained conflict lists. This specification provides the missing auto-discovery layer.
 
@@ -378,7 +378,7 @@ Block 3 (0x38–0x3F)   ADXL343 — accelerometer (hardware v2 only)
 
 No Page 2. Calibration constants (Steinhart-Hart coefficients, UV cross-talk compensation) are hardcoded in the library. If per-unit calibration is added, Page 2 is the natural home.
 
-> **Hardware v1 note:** The ADXL343 accelerometer is wired to the master I2C bus (addresses 0x1D / 0x53) and is not bridged through the ATtiny register map. Block 3 is reserved on v1 hardware. Hardware v2 will move the ADXL343 to the ATtiny software I2C bus, enabling single-address access. See [Project-Libelle issue #19](https://github.com/NorthernWidget-Skunkworks/Project-Libelle/issues/19).
+> **Hardware v1 note:** The ADXL343 accelerometer is wired to the controller I2C bus (addresses 0x1D / 0x53) and is not bridged through the ATtiny register map. Block 3 is reserved on v1 hardware. Hardware v2 will move the ADXL343 to the ATtiny software I2C bus, enabling single-address access. See [Project-Libelle issue #19](https://github.com/NorthernWidget-Skunkworks/Project-Libelle/issues/19).
 
 > **Known bug in deployed firmware:** The firmware writes UVB starting at register 0x07; the library reads it from 0x06. This causes `getUVB()` to return approximately true_UVB × 256. All historical UVB data is affected. See [Project-Libelle issue #18](https://github.com/NorthernWidget-Skunkworks/Project-Libelle/issues/18).
 
