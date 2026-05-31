@@ -409,6 +409,51 @@ No Page 2. Calibration constants (Steinhart-Hart coefficients, UV cross-talk com
 
 > **Known bug in deployed firmware:** The firmware writes UVB starting at register 0x07; the library reads it from 0x06. This causes `getUVB()` to return approximately true_UVB × 256. All historical UVB data is affected. See [Project-Libelle issue #18](https://github.com/NorthernWidget-Skunkworks/Project-Libelle/issues/18).
 
+### Okapi (data logger with solar charging and telemetry)
+
+Okapi is an I²C controller communicating with a Particle Boron telemetry board via UART; it has no current peripheral interface. Schema 1 formalizes its EEPROM serial number as Page 0 and reserves a hypothetical Page 1 for status reporting to the Boron or any higher-level device. The UART transport requires a framing layer (Magic Preamble or COBS; see [Transport](#transport)).
+
+#### Page 0
+
+```
+Block 0:  Schema=0x01, Name='O','k','a','p','i',0x00,0x00
+Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=[mfr], 0x00,0x00,0x00, Reserved
+Block 2:  Board type=0x4F01 ('O'=0x4F, rev 1), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
+Block 3:  Reserved, Magic=0x00, CRC=[computed], Peripheral address=0x00 (unassigned)
+```
+
+#### Page 1 (0x20–0x3F) — Logger status — HYPOTHETICAL
+
+```
+Block 0 (0x20–0x27)   System status + power
+  0x20        Status (bit 0=ready, bit 1=SD fault, bit 2=RTC fault,
+                      bit 3=onboard fault, bit 4=sensor fault,
+                      bit 5=LiPo warning, bit 6=LiPo error, bit 7=backup warning)
+  0x21        LiPo %, uint8, 0–100
+  0x22–0x23   LiPo voltage, uint16, 0.01 V
+  0x24–0x25   Solar input, uint16, TBD (pending GetPowerStats() implementation)
+  0x26–0x27   Backup voltage, uint16, 0.01 V (AA backup rail)
+
+Block 1 (0x28–0x2F)   BME280 — onboard environment
+  0x28–0x29   Temperature, int16, 0.01 °C
+  0x2A–0x2B   Humidity, uint16, 0.01 %RH
+  0x2C–0x2F   Pressure, uint32, 0.01 hPa
+
+Block 2 (0x30–0x37)   DS3231M — RTC
+  0x30–0x33   Timestamp, uint32, Unix time (seconds since 1970-01-01 UTC)
+  0x34–0x35   Temperature, int16, 0.01 °C
+  0x36–0x37   Reserved
+
+Block 3 (0x38–0x3F)   Logger state
+  0x38–0x39   External interrupt count, uint16, accumulated
+  0x3A–0x3B   Log file number, uint16
+  0x3C–0x3F   Log interval, uint32, seconds
+```
+
+No Page 2. Calibration constants are hardcoded in the library.
+
+---
+
 ### Margay (data logger)
 
 Margay is an I²C controller, not a peripheral — it queries sensors on the bus rather than responding to queries itself. Schema 1 formalizes its existing EEPROM serial number as Page 0, and defines a hypothetical Page 1 for the case where Margay ever acts as an I²C peripheral of a higher-level device (e.g., a cellular gateway or satellite modem). **Page 1 is not implemented; it is reserved for future use.**
