@@ -272,6 +272,118 @@ Block 1–3 (0x48–0x5F)   Reserved
 
 ---
 
+### Haar (temperature, pressure, relative humidity)
+
+#### Page 0
+
+```
+Block 0:  Schema=0x01, Name='H','a','a','r',0x00,0x00,0x00
+Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=[mfr], 0x00,0x00,0x00, Reserved
+Block 2:  Board type=0x4801 ('H'=0x48, rev 1), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
+Block 3:  Reserved, Magic=0x00, CRC=[computed], I2C address=0x42
+```
+
+#### Page 1 (0x20–0x3F) — Sensor data
+
+```
+Block 0 (0x20–0x27)   SHT31 — temperature + humidity
+  0x20        Status (bit 0=ready, bit 1=SHT31 fault, bit 2=LPS35HW fault)
+  0x21–0x22   Temp SHT31, int16, 0.01 °C, little-endian
+  0x23–0x24   Humidity, uint16, 0.01 % RH, little-endian
+  0x25–0x27   Reserved
+
+Block 1 (0x28–0x2F)   LPS35HW — pressure + temperature
+  0x28–0x2B   Pressure, uint32, 0.01 hPa, little-endian
+  0x2C–0x2D   Temp LPS35HW, int16, 0.01 °C, little-endian
+  0x2E–0x2F   Reserved
+
+Block 2–3 (0x30–0x3F)   Reserved
+```
+
+No Page 2. Both sensors are factory-calibrated; no user calibration step.
+
+---
+
+### Walrus (submersible pressure + temperature)
+
+#### Page 0
+
+```
+Block 0:  Schema=0x01, Name='W','a','l','r','u','s',0x00
+Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=[mfr], 0x00,0x00,0x00, Reserved
+Block 2:  Board type=0x5702 ('W'=0x57, rev 2), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
+Block 3:  Reserved, Magic=0x00, CRC=[computed], I2C address=0x4D
+```
+
+#### Page 1 (0x20–0x3F) — Sensor data
+
+```
+Block 0 (0x20–0x27)   MS5803 — pressure + temperature
+  0x20        Status (bit 0=ready, bit 1=MS5803 fault, bit 2=ext temp fault)
+  0x21–0x24   Pressure, int32, µBar, little-endian
+  0x25–0x26   Temp MS5803, int16, 0.01 °C, little-endian
+  0x27        Reserved
+
+Block 1 (0x28–0x2F)   MCP9808 — external temperature
+  0x28–0x29   Temp ext, int16, 0.01 °C, little-endian
+  0x2A–0x2F   Reserved
+
+Block 2–3 (0x30–0x3F)   Reserved
+```
+
+No Page 2. MS5803 calibration coefficients are read from its internal PROM at startup; MCP9808 is factory-calibrated.
+
+> **Open item:** Walrus uses µBar; Haar uses 0.01 hPa. 1 µBar = 0.001 hPa. Pressure units must be unified across the spec before either firmware is updated.
+
+---
+
+### Libelle (multi-spectral shortwave pyranometer)
+
+#### Page 0
+
+```
+Block 0:  Schema=0x01, Name='L','i','b','e','l','l','e'  (exact 7-byte fit)
+Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=[mfr], 0x00,0x00,0x00, Reserved
+Block 2:  Board type=0x4C01 ('L'=0x4C, rev 1), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
+Block 3:  Reserved, Magic=0x00, CRC=[computed], I2C address=0x40 (UP) or 0x41 (DOWN)
+```
+
+#### Page 1 (0x20–0x3F) — Sensor data
+
+```
+Block 0 (0x20–0x27)   VEML6030 — visible light
+  0x20        Status (bit 0=ready, bit 1=VEML6075 fault,
+                      bit 2=VEML6030 fault, bit 3=ADS1115 fault)
+  0x21–0x22   ALS, uint16, raw VEML6030 counts, little-endian
+  0x23–0x24   White, uint16, raw VEML6030 counts, little-endian
+  0x25–0x26   Lux mult, uint16, auto-range scaler (ALS × mult × 0.0036 → lux)
+  0x27        Reserved
+
+Block 1 (0x28–0x2F)   VEML6075 — UV
+  0x28–0x2B   UVA, int32, compensated counts, little-endian
+  0x2C–0x2F   UVB, int32, compensated counts, little-endian
+
+Block 2 (0x30–0x37)   ADS1115 — IR + temperature
+  0x30–0x31   IR Short, uint16, raw ADC counts (×1.25e-4 → V)
+  0x32–0x33   IR Mid, uint16, raw ADC counts (×1.25e-4 → V)
+  0x34–0x35   Temperature, uint16, raw ADC counts (Steinhart-Hart → °C)
+  0x36–0x37   Reserved
+
+Block 3 (0x38–0x3F)   ADXL343 — accelerometer (hardware v2 only)
+  0x38–0x39   Accel X, int16, little-endian
+  0x3A–0x3B   Accel Y, int16, little-endian
+  0x3C–0x3D   Accel Z, int16, little-endian
+  0x3E–0x3F   Reserved
+```
+
+No Page 2. Calibration constants (Steinhart-Hart coefficients, UV cross-talk compensation) are hardcoded in the library. If per-unit calibration is added, Page 2 is the natural home.
+
+> **Hardware v1 note:** The ADXL343 accelerometer is wired to the master I2C bus (addresses 0x1D / 0x53) and is not bridged through the ATtiny register map. Block 3 is reserved on v1 hardware. Hardware v2 will move the ADXL343 to the ATtiny software I2C bus, enabling single-address access. See [Project-Libelle issue #19](https://github.com/NorthernWidget-Skunkworks/Project-Libelle/issues/19).
+
+> **Known bug in deployed firmware:** The firmware writes UVB starting at register 0x07; the library reads it from 0x06. This causes `getUVB()` to return approximately true_UVB × 256. All historical UVB data is affected. See [Project-Libelle issue #18](https://github.com/NorthernWidget-Skunkworks/Project-Libelle/issues/18).
+
+---
+
 ## License
 
 This specification is released under the [Creative Commons Attribution-ShareAlike 4.0 International License](LICENSE) (CC BY-SA 4.0).
