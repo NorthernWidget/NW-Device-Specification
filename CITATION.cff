@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+message: "If you use this specification, please cite it as below."
+authors:
+- family-names: "Wickert"
+  given-names: "Andy"
+  orcid: "https://orcid.org/0000-0002-9545-3365"
+  affiliation: "Northern Widget LLC"
+title: "NW-Device-Specification"
+version: 1.0.0
+date-released: 2026-05-31
+license: CC-BY-SA-4.0
+repository-code: "https://github.com/NorthernWidget/NW-Device-Specification"
+abstract: "A transport-agnostic specification for embedded device identity, communication, and data exchange on shared buses."

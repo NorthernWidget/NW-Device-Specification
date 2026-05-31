@@ -1,0 +1,281 @@
+# NW-Device-Specification
+
+**Author:** Andy Wickert ([ORCID 0000-0002-9545-3365](https://orcid.org/0000-0002-9545-3365)), Northern Widget LLC
+**License:** [CC BY-SA 4.0](LICENSE)
+
+A transport-agnostic specification for embedded device identity, communication, and data exchange on shared buses. Designed for low-power environmental sensors and data loggers, but applicable to any device that can expose a byte-addressable address space.
+
+The specification defines how a device presents itself — what it is, what version it runs, what it measures — so that a host (logger, microcontroller, or any master) can discover and interact with it automatically, without prior knowledge of the specific device.
+
+---
+
+## Background and history
+
+This specification grew out of a decade of practice building open-source environmental sensors and data loggers at [Northern Widget](https://northernwidget.com). Three generations of design are described here, each building on the last.
+
+### Schema 0 — Margay serial number block (c. 2015, deployed)
+
+The [Margay](https://github.com/NorthernWidget/Project-Margay) data logger was the first Northern Widget hardware to carry a structured identity block. At manufacture, a setup script writes an 8-byte serial number into the last 8 bytes of the ATmega1284p's EEPROM:
+
+```
+Offset  Field       Size  Notes
+  0     Board type  2 B   High byte = ASCII initial of board name;
+                          low byte = hardware revision index
+                          (e.g. 0x4D03 = Margay v3.0)
+  2     Group ID    2 B   Batch or deployment group
+  4     Unique ID   2 B   Individual unit within the group
+  6     FirmwareID  2 B   Always written as 0x0000; reserved
+```
+
+This block is read by a programmer or setup jig — not exposed over I2C. It is a manufacturing-time convention, not a bus-communication protocol. Its significance here is twofold:
+
+1. It established the serial number vocabulary (board type / group / unique ID) that Schema 1 inherits.
+2. The `FirmwareID` field, always `0x0000`, means every Margay ever programmed already carries `Schema = 0x00` in that slot — an accidental deployment of schema numbering before the concept was formalized.
+
+Schema 0 is a Margay-only artifact. Sensors produced before Schema 1 typically have blank EEPROM (`0xFF`) and no structured identity block.
+
+---
+
+### Schema 1 prototype — Apis I2C register map (c. 2019, deployed)
+
+The [Apis](https://github.com/NorthernWidget/Project-Apis) LiDAR rangefinder board was the first Northern Widget sensor to expose a structured I2C register map. The ATtiny1634 firmware populates a 32-byte array (`Reg[32]`) in SRAM and serves it over I2C via the WireS library. The 32-byte size was chosen to fit within the Arduino Wire library's default transaction buffer.
+
+The register map as currently deployed:
+
+```
+Address  Field             Type    Notes
+  0x00   Status            uint8   Bit 0 = ready (0 = initialising, 1 = ready)
+  0x01   'A'               ASCII   ─┐
+  0x02   'p'               ASCII    │ Device name, 4 bytes
+  0x03   'i'               ASCII    │
+  0x04   's'               ASCII   ─┘
+  0x05   HW version major  uint8
+  0x06   HW version minor  uint8
+  0x07   FW patch version  uint8
+  0x08   Range low byte    uint8   ─┐ int16 [cm], little-endian
+  0x09   Range high byte   uint8   ─┘
+  0x0A   Signal strength   uint8   From LiDAR Lite register 0x0E
+  0x0B   Config            uint8   Sensitivity [bits 1:0], writable
+  0x0C   I2C address       uint8   Writable; persisted to EEPROM
+  0x0D   Reserved
+  0x0E   Reserved
+  0x0F   Reserved
+  0x10   Accel X low       uint8   ─┐ int16, little-endian
+  0x11   Accel X high      uint8   ─┘
+  0x12   Accel Y low       uint8   ─┐
+  0x13   Accel Y high      uint8   ─┘
+  0x14   Accel Z low       uint8   ─┐
+  0x15   Accel Z high      uint8   ─┘
+  0x16   Reserved
+  0x17   Reserved
+  0x18   Offset X low      uint8   ─┐ int16, little-endian; from EEPROM
+  0x19   Offset X high     uint8   ─┘
+  0x1A   Offset Y low      uint8   ─┐
+  0x1B   Offset Y high     uint8   ─┘
+  0x1C   Offset Z low      uint8   ─┐
+  0x1D   Offset Z high     uint8   ─┘
+  0x1E   Reserved
+  0x1F   Reserved
+```
+
+This prototype introduced the key concepts that Schema 1 formalises: a fixed device name at known addresses, hardware and firmware version bytes, a ready flag, and a writable I2C address register. Its limitations — status at 0x00 leaving no room for a schema byte, identity and sensor data mixed in a single page, no serial number, no integrity check — motivated the design below.
+
+---
+
+### Schema 1 — NW-Device-Specification v1 (2026)
+
+The full specification, described in detail in the sections that follow.
+
+---
+
+## Design principles
+
+- **Transport-agnostic.** The specification defines a virtual byte-addressable address space. I2C, RS-485, SPI, or any byte-serial transport may carry it.
+- **Fixed 32-byte pages.** Pages are the atomic read unit. 32 bytes is the lowest-common-denominator single-transaction read on stock Arduino hardware (Wire buffer limit). Fixed page size means fixed offsets, no parser, no seek — a corrupt byte damages only its own field.
+- **Auto-discovery.** A master scans addresses, reads 8 bytes (Block 0 of Page 0), and immediately knows whether a device is NW-schema-compliant and what it is. No prior knowledge required.
+- **Layered.** A master that only needs identity reads Page 0. A master that needs measurements reads Page 1. Future schemas add pages; old masters ignore pages they don't know.
+- **No central registrar.** Device identity is established by a 7-byte ASCII name at a fixed address. A central manufacturer ID registry is not required.
+
+---
+
+## Address space
+
+The device exposes a flat, byte-addressable virtual address space. The master writes a starting address, then reads N bytes (maximum 32 per transaction). The device increments the address pointer with each byte returned.
+
+Pages are 32-byte aligned:
+
+| Page   | Addresses   | Contents                  | Backing store |
+|--------|-------------|---------------------------|---------------|
+| Page 0 | 0x00–0x1F   | Identity (this document)  | Persistent (EEPROM or equivalent) |
+| Page 1 | 0x20–0x3F   | Sensor data               | SRAM (runtime) |
+| Page 2 | 0x40–0x5F   | Calibration               | Persistent (EEPROM or equivalent) |
+| Page N | …           | Future use                | TBD |
+
+The schema byte (Page 0, address 0x00) declares which pages a device exposes.
+
+---
+
+## Page 0 — Identity
+
+32 bytes, persistent. Written at manufacture; rarely changed. Organised as four 8-byte blocks.
+
+### Block 0 (0x00–0x07) — Core identity
+
+Read this block first. 8 bytes, one transaction. Sufficient to identify any compliant device.
+
+```
+Address  Field   Size  Contents
+  0x00   Schema  1 B   NW schema version (0x01 for this specification)
+  0x01   Name    7 B   ASCII device name, null-padded if shorter than 7 characters
+  –0x07
+```
+
+The schema byte at 0x00 is the first thing a master reads. A value of 0x01 indicates compliance with this specification. Any other value (including 0x00, the Margay legacy schema, or 0xFF, unprogrammed EEPROM) means the device does not implement Schema 1.
+
+The 7-byte name field accommodates all current Northern Widget device names without truncation. A fixed-position name at a fixed address gives negligible collision probability with non-compliant devices; no manufacturer prefix is required.
+
+Reserved bytes are written as 0x00 at manufacture. 0xFF indicates unprogrammed EEPROM.
+
+### Block 1 (0x08–0x0F) — Version
+
+```
+Address  Field     Size  Contents
+  0x08   HW major  1 B   Hardware version major
+  0x09   HW minor  1 B   Hardware version minor
+  0x0A   FW/HW patch 1B  Combined-repo devices: firmware patch version (NW convention).
+                         Separate-repo devices: hardware patch version.
+  0x0B   FW major  1 B   Firmware major (0x00 if combined repo)
+  0x0C   FW minor  1 B   Firmware minor (0x00 if combined repo)
+  0x0D   FW patch  1 B   Firmware patch (0x00 if combined repo)
+  0x0E   Reserved  1 B   0x00
+  0x0F   Reserved  1 B   0x00
+```
+
+**Combined-repo convention (Northern Widget):** Hardware and firmware share a single repository and a single version tag (M.m.F, where M.m = hardware version and F = firmware patch). In this case, write the firmware patch to 0x0A and leave 0x0B–0x0D as 0x00.
+
+**Separate-repo convention:** Write full SemVer for hardware (0x08–0x0A) and firmware (0x0B–0x0D) independently.
+
+### Block 2 (0x10–0x17) — Serial number
+
+```
+Address  Field        Size  Contents
+  0x10   Board type   2 B   High byte: ASCII initial of device name.
+                            Low byte: hardware revision index (0, 1, 2, …).
+  0x12   Group ID     2 B   Batch or deployment group identifier.
+  0x14   Unique ID    2 B   Individual unit identifier within the group.
+  0x16   FirmwareID   2 B   Legacy field; write as 0x0000. Reserved for future use.
+```
+
+The serial number block follows the convention established by the Margay data logger (Schema 0). Preserving this layout maintains consistency with existing NW manufacturing records.
+
+Group ID and unique ID assignment are the responsibility of the device manufacturer. No central registry is required; uniqueness within a deployment is the practical requirement.
+
+### Block 3 (0x18–0x1F) — Integrity and administration
+
+```
+Address  Field       Size  Contents
+  0x18   Reserved    5 B   0x00
+  –0x1C
+  0x1D   Magic byte  1 B   Reserved; candidate use: fixed NW marker byte as an
+                           additional integrity check alongside the CRC. Purpose
+                           and value TBD. Write as 0x00 until standardised.
+  0x1E   CRC         1 B   CRC-8 of bytes 0x00–0x1D. Allows a master to detect
+                           EEPROM corruption before acting on identity data.
+  0x1F   I2C address 1 B   Writable. The device's current I2C address, persisted
+                           to EEPROM. Takes effect on next boot. Falls back to
+                           the device's default address if 0xFF (unprogrammed).
+```
+
+---
+
+## Page 1 — Sensor data
+
+32 bytes, SRAM-backed, updated every measurement cycle. Device-specific; defined per device type.
+
+The first byte (0x20) is always the **status byte**:
+
+```
+Bit  Meaning
+  0  Ready: 0 = initialising or between measurements; 1 = measurement valid
+1–7  Device-specific failure flags (0 = nominal)
+```
+
+A master reads all 32 bytes of Page 1 in one transaction. The status byte is checked first; if bit 0 is clear, the remaining bytes are stale and should not be used.
+
+Sensor-specific layouts for Page 1 are defined in per-device appendices.
+
+---
+
+## Page 2 — Calibration
+
+32 bytes, persistent (EEPROM-backed). Written at calibration time; read by a master that wishes to verify or update calibration state. Device-specific; defined per device type.
+
+---
+
+## Prior art
+
+This specification was designed with awareness of the following existing standards:
+
+- **IEEE 1451 / TEDS** — the closest philosophical precedent: smart-transducer self-identification, an EEPROM-resident identity block, and media independence. This specification differs in being open and unencumbered (IEEE 1451 is paywalled), using a flat byte map rather than bit-packed templates, and co-locating runtime data with identity rather than separating them entirely.
+- **I2C Device ID** (reserved address 0xF8) — the closest base-I2C primitive: a 3-byte identifier (12-bit manufacturer / 9-bit part / 3-bit revision). This specification extends that concept to a full identity page.
+- **SMBus ARP and UDID** — bus-native device discovery and dynamic address assignment, analogous to the writable address register at 0x1F. Widely considered heavyweight; this specification offers a lighter scan-and-read alternative.
+- **IPMI FRU** — structural reference for area-based versioning and extensibility. This specification borrows the extensibility philosophy (schema versioning allows old masters to skip unknown pages) but rejects FRU's variable-length offset-chained block structure in favour of fixed-position fields.
+- **JEDEC SPD** — fixed-byte-map-in-EEPROM-over-SMBus, the closest historical precedent for Page 0.
+- **Adafruit STEMMA QT / SparkFun Qwiic** — these ecosystems standardised I2C connectors and voltage levels but not device identity or discovery. Devices in these ecosystems are identified by fixed I2C address, chip-specific WHO_AM_I registers, and human-maintained conflict lists. This specification provides the missing auto-discovery layer.
+
+---
+
+## Per-device appendices
+
+### Apis (LiDAR rangefinder + accelerometer)
+
+#### Page 0
+
+```
+Block 0:  Schema=0x01, Name='A','p','i','s',0x00,0x00,0x00
+Block 1:  HW major=0x00, HW minor=0x01, FW patch=0x00, 0x00,0x00,0x00, Reserved
+Block 2:  Board type=0x4101, Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
+Block 3:  Reserved, Magic=0x00, CRC=[computed], I2C address=0x50
+```
+
+#### Page 1 (0x20–0x3F) — Sensor data
+
+```
+Block 0 (0x20–0x27)   LiDAR
+  0x20        Status (bit 0=ready, bit 1=LiDAR fail, bit 2=accel fail)
+  0x21–0x22   Range [cm], little-endian int16
+  0x23        Signal strength, uint8
+  0x24        Config: sensitivity [bits 1:0], writable
+  0x25–0x27   Reserved
+
+Block 1 (0x28–0x2F)   Accelerometer
+  0x28–0x29   Accel X, little-endian int16
+  0x2A–0x2B   Accel Y, little-endian int16
+  0x2C–0x2D   Accel Z, little-endian int16
+  0x2E–0x2F   Reserved
+
+Block 2 (0x30–0x37)   Reserved
+Block 3 (0x38–0x3F)   Reserved
+```
+
+#### Page 2 (0x40–0x5F) — Calibration
+
+```
+Block 0 (0x40–0x47)   Accelerometer offsets
+  0x40–0x41   Offset X, little-endian int16
+  0x42–0x43   Offset Y, little-endian int16
+  0x44–0x45   Offset Z, little-endian int16
+  0x46–0x47   Reserved
+
+Block 1–3 (0x48–0x5F)   Reserved
+```
+
+---
+
+## License
+
+This specification is released under the [Creative Commons Attribution-ShareAlike 4.0 International License](LICENSE) (CC BY-SA 4.0).
+
+You are free to implement, adapt, and redistribute this specification, including for commercial purposes, provided you give appropriate credit and share any adaptations under the same license.
+
+&copy; 2026 Andy Wickert, Northern Widget LLC
