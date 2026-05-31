@@ -115,6 +115,33 @@ The schema byte (Page 0, address 0x00) declares which pages a device exposes.
 
 ---
 
+## Transport
+
+This specification is transport-agnostic. The 32-byte page layout is a data structure; the physical layer is separate.
+
+### I²C (primary transport)
+
+The controller performs a register-addressed read: write the starting address (e.g., `0x00` for Page 0, `0x20` for Page 1), then clock out up to 32 bytes. The device increments its address pointer with each byte returned. This is the standard NW sensor peripheral interface.
+
+### UART
+
+UART has no inherent framing — a bare address byte will be misinterpreted if the line carries other traffic. A framing layer is required. Two options are supported:
+
+**COBS (Consistent Overhead Byte Stuffing)** — a formal standard that encodes data so `0x00` never appears in the payload, making `0x00` an unambiguous frame boundary. Arduino libraries are available. Recommended when interoperability or formal correctness matters.
+
+**Magic Preamble** — a two-byte sync sequence (`0xAA 0x55`) that cannot appear in normal ASCII traffic, followed by a page-address byte. Simple to implement by hand.
+
+Magic Preamble frame format:
+
+```
+Request  (controller → device):  [0xAA][0x55][page_addr]           3 bytes
+Response (device → controller):  [0xAA][0x55][page_addr][32 bytes][CRC-8]  36 bytes
+```
+
+The preamble in the response allows the controller to re-synchronise if it misses the start. Both COBS and Magic Preamble framing are acceptable NW UART conventions; the choice is per-device and should be documented in the device's own specification.
+
+---
+
 ## Page 0 — Identity
 
 32 bytes, persistent. Written at manufacture; rarely changed. Organised as four 8-byte blocks.
