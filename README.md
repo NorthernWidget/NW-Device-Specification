@@ -145,6 +145,22 @@ Device-specific EEPROM usage (outside Pages 0 and 2) must stay **below** `EEPROM
 
 ---
 
+## Device provisioning reference
+
+The table below lists the MCU, EEPROM size, and avrdude part identifier for each NW device. EEPROM size determines where Page 0 is written (`EEPROM[length−32]`). The avrdude part is used by [NW-Provision](https://github.com/NorthernWidget/NW-Provision) and also serves as a hardware safety check: avrdude verifies the chip's signature bytes against the specified part and refuses to program a mismatch.
+
+| Device  | MCU          | EEPROM | Page 0 offset | avrdude part |
+|---------|-------------|--------|--------------|-------------|
+| Margay  | ATmega1284P | 4096 B | 0x0FE0       | `m1284p`    |
+| Okapi   | ATmega1284P | 4096 B | 0x0FE0       | `m1284p`    |
+| Apis    | ATtiny1634  | 256 B  | 0x00E0       | `t1634`     |
+| Haar    | ATtiny1634  | 256 B  | 0x00E0       | `t1634`     |
+| Walrus  | ATtiny1634  | 256 B  | 0x00E0       | `t1634`     |
+| Libelle | ATtiny841   | 512 B  | 0x01E0       | `t841`      |
+| Liasis  | — (no MCU)  | —      | —            | —           |
+
+---
+
 ## Transport
 
 This specification is transport-agnostic. The 32-byte page layout is a data structure; the physical layer is separate.
