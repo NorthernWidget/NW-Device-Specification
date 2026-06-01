@@ -301,10 +301,12 @@ This specification was designed with awareness of the following existing standar
 
 ```
 Block 0:  Schema=0x01, Name='A','p','i','s',0x00,0x00,0x00
-Block 1:  HW major=0x00, HW minor=0x01, FW patch=0x00, 0x00,0x00,0x00, Reserved
-Block 2:  Board type=0x4101, Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
-Block 3:  Reserved, Magic=0x00, CRC=[computed], I2C address=0x50
+Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=[mfr], 0x00,0x00,0x00, Reserved
+Block 2:  Board type=0x4100 ('A'=0x41, rev 0), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
+Block 3:  Reserved, Magic=0x00, CRC=[computed], I2C address=0x41
 ```
+
+Legacy deployed units carry board type `0x6C00` and I²C address `0x50` (pre-Schema-1).
 
 #### Page 1 (0x20–0x3F) — Sensor data
 
@@ -450,6 +452,25 @@ No Page 2. Calibration constants (Steinhart-Hart coefficients, UV cross-talk com
 
 > **Known bug in deployed firmware:** The firmware writes UVB starting at register 0x07; the library reads it from 0x06. This causes `getUVB()` to return approximately true_UVB × 256. All historical UVB data is affected. See [Project-Libelle issue #18](https://github.com/NorthernWidget-Skunkworks/Project-Libelle/issues/18).
 
+### Liasis (longwave pyrgeometer)
+
+#### Page 0
+
+```
+Block 0:  Schema=0x01, Name='L','i','a','s','i','s',0x00
+Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=[mfr], 0x00,0x00,0x00, Reserved
+Block 2:  Board type=0x6C01 ('l'=0x6C, rev 1), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
+Block 3:  Reserved, Magic=0x00, CRC=[computed], I2C address=TBD
+```
+
+Note: `0x6C00` is reserved — it was assigned to Apis before the ASCII-initial naming convention was established. Legacy deployed units carry board types `0x2400`/`0x2401` (formerly Dyson LW, Monarch LW).
+
+#### Page 1 (0x20–0x3F) — Sensor data
+
+Page 1 layout TBD. See [Project-Liasis](https://github.com/NorthernWidget-Skunkworks/Project-Liasis) for current sensor configuration.
+
+---
+
 ### Okapi (data logger with solar charging and telemetry)
 
 Okapi is an I²C controller communicating with a Particle Boron telemetry board via UART; it has no current peripheral interface. Schema 1 formalizes its EEPROM serial number as Page 0 and reserves a hypothetical Page 1 for status reporting to the Boron or any higher-level device. The UART transport requires a framing layer (Magic Preamble or COBS; see [Transport](#transport)).
@@ -551,7 +572,8 @@ Controller-only devices (Margay, Okapi) have no current peripheral address; entr
 
 | Device | Type | Current address(es) | Proposed (Schema 1) | Mnemonic | Notes |
 |--------|------|---------------------|---------------------|----------|-------|
-| Apis | Peripheral | `0x50` (primary) | `0x41` | `'A'` | ⚠ Proposed `0x41` clashes with Libelle DOWN (current) |
+| Apis | Peripheral | `0x50` (primary) | `0x41` | `'A'` | Legacy board type `0x6C00`; Schema 1 board type `0x4100` |
+| Liasis | Peripheral | — | TBD | `'l'` | `0x6C00` reserved (legacy Apis); Schema 1 board type `0x6C01` |
 | Haar | Peripheral | `0x42` (primary) | `0x48` | `'H'` | `0x48` is common for ADS1115; no NW-device conflict |
 | Libelle | Peripheral | `0x40` UP, `0x41` DOWN | `0x4C` UP, TBD DOWN | `'L'` | Hardware solder jumper; DOWN address TBD — `0x4D` = Margay clash |
 | Margay | Controller (hypothetical) | — | `0x4D` | `'M'` | **Reserved.** Controller only; no peripheral interface yet |
@@ -562,10 +584,7 @@ Controller-only devices (Margay, Okapi) have no current peripheral address; entr
 
 1. **Walrus `0x4D` → Margay `'M'` = `0x4D`:** Walrus must migrate to `0x57` (`'W'`) in Schema 1. This is a breaking change to existing deployments.
 
-2. **Libelle DOWN `0x41` → Apis `'A'` = `0x41`:** These conflict. Resolution options:
-   - Keep Libelle at `0x40`/`0x41` (hardware-set by solder jumper; no PCB change needed) and assign Apis a different address.
-   - Move Libelle to `0x4C`/? in a future hardware revision and free `0x41` for Apis.
-   - Libelle DOWN Schema 1 secondary address is deferred until this is resolved.
+2. **Libelle DOWN `0x41` → Apis `'A'` = `0x41`:** Resolved in Schema 1. Libelle moves to `0x4C` (UP); DOWN address is TBD but will not be `0x41`. Apis takes `0x41`.
 
 3. **Libelle DOWN Schema 1 address:** Cannot be `0x4D` (Margay). If Libelle moves to the mnemonic scheme, `'L'+1` = `0x4D` is unavailable. Candidate: keep Libelle UP at `0x4C` and assign DOWN by bit-flip or a non-sequential scheme. **Unresolved.**
 
