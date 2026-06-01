@@ -500,6 +500,8 @@ Block 2:  Board type=0x4F01 ('O'=0x4F, rev 1), Group ID=[mfr], Unique ID=[mfr], 
 Block 3:  Reserved, Magic=0x00, CRC=[computed], Peripheral address=0x00 (unassigned)
 ```
 
+Pre-production prototype units ("Resnik") carry board type `0x9950` and are not field-upgradeable to Schema 1.
+
 #### Page 1 (0x20–0x3F) — Logger status — HYPOTHETICAL
 
 ```
