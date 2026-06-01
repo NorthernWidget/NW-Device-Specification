@@ -388,6 +388,18 @@ Block 2–3 (0x30–0x3F)   Reserved
 
 No Page 2. Both sensors are factory-calibrated; no user calibration step.
 
+**LPS35HW pressure sensor characteristics:**
+
+| Parameter | Value |
+|-----------|-------|
+| Sensor range | 260–1260 hPa |
+| Raw LSB | 1/4096 hPa ≈ 0.000244 hPa (0.024 Pa) |
+| Stored unit | 0.01 hPa (1 Pa) |
+| Stored range | 26,000–126,000 |
+| Effective noise floor | ~0.002 hPa RMS @ 1 Hz |
+
+Unit rationale: 0.01 hPa is the natural meteorological unit and aligns with the LPS35HW's native hPa output. The Walrus pressure register uses µBar (see below); the difference is intentional — each unit matches its sensor's native output format.
+
 ---
 
 ### Walrus (submersible pressure + temperature)
@@ -419,7 +431,18 @@ Block 2–3 (0x30–0x3F)   Reserved
 
 No Page 2. MS5803 calibration coefficients are read from its internal PROM at startup; MCP9808 is factory-calibrated.
 
-> **Open item:** Walrus uses µBar; Haar uses 0.01 hPa. 1 µBar = 0.001 hPa. Pressure units must be unified across the spec before either firmware is updated.
+**MS5803 pressure sensor characteristics by variant:**
+
+| Variant | Application | Range | Resolution @ OSR=4096 | Stored range (µBar) |
+|---------|-------------|-------|-----------------------|---------------------|
+| MS5803-01BA | Barometer | 10–1300 mbar | ~0.012 mbar (12 µBar) | 10,000–1,300,000 |
+| MS5803-02BA | Shallow water | 0–2 bar | ~0.020 mbar (20 µBar) | 0–2,000,000 |
+| MS5803-05BA | Medium depth | 0–6 bar | ~0.050 mbar (50 µBar) | 0–6,000,000 |
+| MS5803-14BA | Deep water | 0–14 bar | ~0.200 mbar (200 µBar) | 0–14,000,000 |
+
+All variants fit within int32 (~2.1 billion µBar max). The -01BA installed in a Walrus makes it a high-resolution barometer; installed -02BA/-05BA variants measure water column depth (1 mbar ≈ 1 cm water).
+
+Unit rationale: µBar is the MS5803 library's internal `_pressure_actual` unit, requiring no conversion in firmware. The Haar pressure register uses 0.01 hPa; the difference is intentional — each unit matches its sensor's native output format.
 
 ---
 
