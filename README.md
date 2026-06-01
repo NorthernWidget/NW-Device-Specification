@@ -287,7 +287,7 @@ Bit  Meaning
 
 A controller reads all 32 bytes of Page 1 in one transaction. The status byte is checked first; if bit 0 is clear, the remaining bytes are stale and should not be used. Bit 7 provides a generic fault summary without requiring the controller to know device-specific bit assignments.
 
-The last byte of Block 0, **0x27, is reserved as the extended fault byte** across all devices. Firmware must write it as 0x00 unless a device appendix defines its bits. It is held open so that future devices with more than six fault categories can extend the fault field without displacing sensor data.
+The second byte of Block 0, **0x21, is reserved as the extended fault byte** across all devices. Firmware must write it as 0x00 unless a device appendix defines its bits. Placing it immediately after the status byte keeps all fault information contiguous — a controller reads 0x20–0x21 to get the complete fault picture. Sensor data begins at 0x22.
 
 Sensor-specific layouts for Page 1 are defined in per-device appendices.
 
@@ -333,11 +333,11 @@ Legacy deployed units carry board type `0x6C00` and I²C address `0x50` (pre-Sch
 Block 0 (0x20–0x27)   LiDAR
   0x20        Status (bit 0=ready, bit 1=LiDAR fail, bit 2=accel fail,
                       bit 7=pan-fault)
-  0x21–0x22   Range [cm], little-endian int16
-  0x23        Signal strength, uint8
-  0x24        Config: sensitivity [bits 1:0], writable
-  0x25–0x26   Reserved
-  0x27        Extended faults (reserved, 0x00)
+  0x21        Extended faults (reserved, 0x00)
+  0x22–0x23   Range [cm], little-endian int16
+  0x24        Signal strength, uint8
+  0x25        Config: sensitivity [bits 1:0], writable
+  0x26–0x27   Reserved
 
 Block 1 (0x28–0x2F)   Accelerometer
   0x28–0x29   Accel X, little-endian int16
@@ -380,10 +380,10 @@ Block 3:  Reserved, Magic=0x00, CRC=[computed], I2C address=0x42
 Block 0 (0x20–0x27)   SHT31 — temperature + humidity
   0x20        Status (bit 0=ready, bit 1=SHT31 fault, bit 2=LPS35HW fault,
                       bit 7=pan-fault)
-  0x21–0x22   Temp SHT31, int16, 0.01 °C, little-endian
-  0x23–0x24   Humidity, uint16, 0.01 % RH, little-endian
-  0x25–0x26   Reserved
-  0x27        Extended faults (reserved, 0x00)
+  0x21        Extended faults (reserved, 0x00)
+  0x22–0x23   Temp SHT31, int16, 0.01 °C, little-endian
+  0x24–0x25   Humidity, uint16, 0.01 % RH, little-endian
+  0x26–0x27   Reserved
 
 Block 1 (0x28–0x2F)   LPS35HW — pressure + temperature
   0x28–0x2B   Pressure, uint32, 0.01 hPa, little-endian
@@ -426,9 +426,9 @@ Block 3:  Reserved, Magic=0x00, CRC=[computed], I2C address=0x4D
 Block 0 (0x20–0x27)   MS5803 — pressure + temperature
   0x20        Status (bit 0=ready, bit 1=MS5803 fault, bit 2=ext temp fault,
                       bit 7=pan-fault)
-  0x21–0x24   Pressure, int32, µBar, little-endian
-  0x25–0x26   Temp MS5803, int16, 0.01 °C, little-endian
-  0x27        Extended faults (reserved, 0x00)
+  0x21        Extended faults (reserved, 0x00)
+  0x22–0x25   Pressure, int32, µBar, little-endian
+  0x26–0x27   Temp MS5803, int16, 0.01 °C, little-endian
 
 Block 1 (0x28–0x2F)   MCP9808 — external temperature
   0x28–0x29   Temp ext, int16, 0.01 °C, little-endian
@@ -472,10 +472,10 @@ Block 0 (0x20–0x27)   VEML6030 — visible light
   0x20        Status (bit 0=ready, bit 1=VEML6075 fault,
                       bit 2=VEML6030 fault, bit 3=ADS1115 fault,
                       bit 7=pan-fault)
-  0x21–0x22   ALS, uint16, raw VEML6030 counts, little-endian
-  0x23–0x24   White, uint16, raw VEML6030 counts, little-endian
-  0x25–0x26   Lux mult, uint16, auto-range scaler (ALS × mult × 0.0036 → lux)
-  0x27        Extended faults (reserved, 0x00)
+  0x21        Extended faults (reserved, 0x00)
+  0x22–0x23   ALS, uint16, raw VEML6030 counts, little-endian
+  0x24–0x25   White, uint16, raw VEML6030 counts, little-endian
+  0x26–0x27   Lux mult, uint16, auto-range scaler (ALS × mult × 0.0036 → lux)
 
 Block 1 (0x28–0x2F)   VEML6075 — UV
   0x28–0x2B   UVA, int32, compensated counts, little-endian
@@ -542,11 +542,11 @@ Block 0 (0x20–0x27)   System status + power
                       bit 3=onboard fault, bit 4=sensor fault,
                       bit 5=LiPo fault, bit 6=backup warning,
                       bit 7=pan-fault)
-  0x21        LiPo %, uint8, 0–100
-  0x22–0x23   LiPo voltage, uint16, 0.01 V
-  0x24–0x25   Solar input, uint16, TBD (pending GetPowerStats() implementation)
-  0x26        Backup voltage, uint8, 0.1 V (AA backup rail; 0–25.5 V range)
-  0x27        Extended faults (reserved, 0x00)
+  0x21        Extended faults (reserved, 0x00)
+  0x22        LiPo %, uint8, 0–100
+  0x23–0x24   LiPo voltage, uint16, 0.01 V
+  0x25–0x26   Solar input, uint16, TBD (pending GetPowerStats() implementation)
+  0x27        Backup voltage, uint8, 0.1 V (AA backup rail; 0–25.5 V range)
 
 Block 1 (0x28–0x2F)   BME280 — onboard environment
   0x28–0x29   Temperature, int16, 0.01 °C
@@ -593,10 +593,10 @@ Block 0 (0x20–0x27)   System status + battery
                       bit 3=onboard fault, bit 4=sensor fault,
                       bit 5=battery warning, bit 6=battery error,
                       bit 7=pan-fault)
-  0x21        Battery %, uint8, 0–100
-  0x22–0x23   Battery voltage, uint16, 0.01 V
-  0x24–0x26   Reserved
-  0x27        Extended faults (reserved, 0x00)
+  0x21        Extended faults (reserved, 0x00)
+  0x22        Battery %, uint8, 0–100
+  0x23–0x24   Battery voltage, uint16, 0.01 V
+  0x25–0x27   Reserved
 
 Block 1 (0x28–0x2F)   BME280 — onboard environment
   0x28–0x29   Temperature, int16, 0.01 °C
