@@ -187,11 +187,22 @@ Address  Field   Size  Contents
   –0x07
 ```
 
-The schema byte at 0x00 is the first thing a controller reads. A value of 0x01 indicates compliance with this specification. Any other value (including 0x00, the Margay legacy schema, or 0xFF, unprogrammed EEPROM) means the device does not implement Schema 1.
+The schema byte at 0x00 is the first thing a controller reads. A controller's decision tree:
+
+| Value | Meaning | Action |
+|-------|---------|--------|
+| `0x01` | Schema 1 (this document) | Parse Pages 0–N per spec |
+| `0x00` | Schema 0 — Margay legacy SN convention | Not I²C auto-detectable; skip |
+| `0xFF` | Unprogrammed EEPROM | Not auto-detectable; skip |
+| `0x02`–`0xFE` | Future or unknown schema | Skip, or parse if the controller knows that version |
+
+**`0x00` and `0xFF` are permanently reserved and will never be assigned to a valid schema.** `0x00` is the erased-then-overwritten default of the Margay serial number block (Schema 0); `0xFF` is the hardware default of blank EEPROM. Both are unambiguously "not auto-detectable" — a controller need not distinguish between them.
+
+Valid schemas therefore occupy `0x01`–`0xFE`: 254 values, sufficient for any conceivable rate of fundamental protocol change.
 
 The 7-byte name field accommodates all current Northern Widget device names without truncation. A fixed-position name at a fixed address gives negligible collision probability with non-compliant devices; no manufacturer prefix is required.
 
-Reserved bytes are written as 0x00 at manufacture. 0xFF indicates unprogrammed EEPROM.
+Reserved bytes are written as `0x00` at manufacture. `0xFF` indicates unprogrammed EEPROM.
 
 ### Block 1 (0x08–0x0F) — Version
 
