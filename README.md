@@ -269,9 +269,9 @@ Group ID and unique ID assignment are the responsibility of the device manufactu
 Address  Field       Size  Contents
   0x18   Reserved    5 B   0x00
   –0x1C
-  0x1D   Magic byte  1 B   Reserved; candidate use: fixed NW marker byte as an
-                           additional integrity check alongside the CRC. Purpose
-                           and value TBD. Write as 0x00 until standardised.
+  0x1D   Magic byte  1 B   Fixed NW marker: always 0x4E (ASCII 'N'). A controller
+                           can check this byte as a quick sanity test before
+                           computing the full CRC-8.
   0x1E   CRC         1 B   CRC-8/SMBUS over bytes 0x00–0x1D (polynomial 0x07,
                            init 0x00, no reflection, no final XOR). Standard variant
                            used by common I²C sensors (SHT3x, HDC1080, etc.);
