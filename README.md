@@ -620,27 +620,28 @@ No Page 2. Battery curve coefficients and Steinhart–Hart thermistor constants 
 
 ## I²C address registry
 
-All NW device addresses, current and proposed. Proposed addresses follow an ASCII-mnemonic scheme: the primary address equals the ASCII code of the device's initial letter, making addresses human-readable in a hex dump. Secondary addresses (for devices that must coexist in pairs on the same bus) use the next ASCII character.
+All NW device addresses, current and proposed. Proposed addresses follow an ASCII-mnemonic scheme:
+
+- **Primary address** = ASCII code of the device's initial letter (uppercase), making addresses human-readable in a hex dump.
+- **Secondary address** applies only to devices with an on-board hardware jumper that selects between two fixed addresses (e.g. Libelle JP1 for UP/DOWN net-radiation pairs). The secondary address = primary address XOR `0x40`, which clears bit 6 and maps the letter to the control character at the analogous position in the ASCII table (zones 000/001 mirror zones 100/101). Secondary addresses therefore occupy the range `0x08`–`0x3F`, entirely outside the letter space reserved for primary addresses. Devices whose address is software-configurable via the EEPROM register at `0x1F` do not need a hardware secondary address.
 
 Controller-only devices (Margay, Okapi) have no current peripheral address; entries are reserved for hypothetical future peripheral interfaces.
 
 | Device | Type | Current address(es) | Proposed (Schema 1) | Mnemonic | Notes |
 |--------|------|---------------------|---------------------|----------|-------|
 | Apis | Peripheral | `0x50` (primary) | `0x41` | `'A'` | Legacy board type `0x6C00`; Schema 1 board type `0x4100` |
-| Liasis | Peripheral | — | TBD | `'l'` | `0x6C00` reserved (legacy Apis); Schema 1 board type `0x6C01` |
+| Liasis | Peripheral | — | TBD | `'l'` | `0x6C00` reserved (legacy Apis); Schema 1 board type `0x6C01`; lowercase initial — secondary address scheme does not apply |
 | Haar | Peripheral | `0x42` (primary) | `0x48` | `'H'` | `0x48` is common for ADS1115; no NW-device conflict |
-| Libelle | Peripheral | `0x40` UP, `0x41` DOWN | `0x4C` UP, TBD DOWN | `'L'` | Hardware solder jumper; DOWN address TBD — `0x4D` = Margay clash |
+| Libelle | Peripheral | `0x40` UP, `0x41` DOWN | `0x4C` UP, `0x0C` DOWN | `'L'` / FF | Hardware solder jumper JP1; DOWN = `'L'` XOR `0x40` = `0x0C` (ASCII Form Feed) |
 | Margay | Controller (hypothetical) | — | `0x4D` | `'M'` | **Reserved.** Controller only; no peripheral interface yet |
 | Okapi | Controller (hypothetical) | — | `0x4F` | `'O'` | **Reserved.** Controller only; no peripheral interface yet |
-| Walrus | Peripheral | `0x4D` primary, `0x41` alt | `0x57`, `0x58` | `'W'`, `'X'` | ⚠ Current `0x4D` must change — clashes with proposed Margay |
+| Walrus | Peripheral | `0x4D` primary, `0x41` alt | `0x57` | `'W'` | ⚠ Current `0x4D` must change — clashes with proposed Margay; address is software-configurable via EEPROM |
 
 ### Clashes requiring resolution
 
 1. **Walrus `0x4D` → Margay `'M'` = `0x4D`:** Walrus must migrate to `0x57` (`'W'`) in Schema 1. This is a breaking change to existing deployments.
 
-2. **Libelle DOWN `0x41` → Apis `'A'` = `0x41`:** Resolved in Schema 1. Libelle moves to `0x4C` (UP); DOWN address is TBD but will not be `0x41`. Apis takes `0x41`.
-
-3. **Libelle DOWN Schema 1 address:** Cannot be `0x4D` (Margay). If Libelle moves to the mnemonic scheme, `'L'+1` = `0x4D` is unavailable. Candidate: keep Libelle UP at `0x4C` and assign DOWN by bit-flip or a non-sequential scheme. **Unresolved.**
+2. **Libelle DOWN `0x41` → Apis `'A'` = `0x41`:** Resolved in Schema 1. Libelle moves to `0x4C` (UP) and `0x0C` (DOWN); Apis takes `0x41`.
 
 ---
 
