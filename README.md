@@ -533,7 +533,7 @@ Note: `0x6C00` is reserved — it was assigned to Apis before the ASCII-initial 
 
 #### Page 1 (0x20–0x3F) — Sensor data
 
-Page 1 layout TBD. See [Project-Liasis](https://github.com/NorthernWidget-Skunkworks/Project-Liasis) for current sensor configuration.
+Page 1 layout TBD. Liasis does not currently have an onboard MCU; it communicates via the host controller's I²C bus rather than exposing its own register map. Page 1 and the I²C address will be defined once Liasis is updated to carry its own MCU, at which point it will follow the same pattern as the other NW peripheral devices.
 
 ---
 
