@@ -421,6 +421,8 @@ Block 2–3 (0x30–0x3F)   Reserved
 
 No Page 2. Both sensors are factory-calibrated; no user calibration step.
 
+> **I²C address note:** `0x48` (`'H'`) is also a common address for the ADS1115 ADC. There is no conflict among NW devices, but a system that independently uses an ADS1115 on the same bus must ensure the ADS1115 is configured to a different address (ADDR pin to GND = `0x48`, VDD = `0x49`, SDA = `0x4A`, SCL = `0x4B` — avoid `0x48`).
+
 **LPS35HW pressure sensor characteristics:**
 
 | Parameter | Value |
@@ -692,6 +694,8 @@ Tracks whether each device's library/firmware and hardware have been updated for
 **Hardware:** new board revision tagged (if required); Page 0 EEPROM provisioned via nw-provision.
 **Integration check:** register map verified against this spec; library compiles against it; data types confirmed.
 **Physical test:** library and hardware tested together on real hardware; data confirmed correct end-to-end.
+
+Note: Liasis shows `—` across all columns because it does not yet have an onboard MCU. All columns will remain not applicable until the hardware is updated. See [Project-Liasis issue #2](https://github.com/NorthernWidget-Skunkworks/Project-Liasis/issues/2).
 
 ---
 
