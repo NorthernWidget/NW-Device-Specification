@@ -263,11 +263,28 @@ Address  Field       Size  Contents
   0x1D   Magic byte  1 B   Reserved; candidate use: fixed NW marker byte as an
                            additional integrity check alongside the CRC. Purpose
                            and value TBD. Write as 0x00 until standardised.
-  0x1E   CRC         1 B   CRC-8 of bytes 0x00–0x1D. Allows a controller to detect
-                           EEPROM corruption before acting on identity data.
+  0x1E   CRC         1 B   CRC-8/SMBUS over bytes 0x00–0x1D (polynomial 0x07,
+                           init 0x00, no reflection, no final XOR). Standard variant
+                           used by common I²C sensors (SHT3x, HDC1080, etc.);
+                           no lookup table required for a 32-byte input.
   0x1F   I2C address 1 B   Writable. The device's current I2C address, persisted
                            to EEPROM. Takes effect on next boot. Falls back to
                            the device's default address if 0xFF (unprogrammed).
+```
+
+Reference implementation (C):
+
+```c
+uint8_t crc8_smbus(const uint8_t *data, uint8_t len) {
+    uint8_t crc = 0x00;
+    for (uint8_t i = 0; i < len; i++) {
+        crc ^= data[i];
+        for (uint8_t b = 0; b < 8; b++)
+            crc = (crc & 0x80) ? (crc << 1) ^ 0x07 : (crc << 1);
+    }
+    return crc;
+}
+/* Usage: crc8_smbus(page0, 0x1E) should equal page0[0x1E] */
 ```
 
 ---
