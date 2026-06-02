@@ -525,6 +525,8 @@ No Page 2. Calibration constants (Steinhart-Hart coefficients, UV cross-talk com
 
 > **Hardware v1 note:** The ADXL343 accelerometer is wired to the controller I2C bus (addresses 0x1D / 0x53) and is not bridged through the ATtiny register map. Block 3 is reserved on v1 hardware. Hardware v2 will move the ADXL343 to the ATtiny software I2C bus, enabling single-address access. See [Project-Libelle issue #19](https://github.com/NorthernWidget-Skunkworks/Project-Libelle/issues/19).
 
+> **Planned MCU migration:** Hardware v2 is proposed to migrate from the ATtiny841 (512 B EEPROM, Page 0 at `0x01E0`) to the ATtiny1634 (256 B EEPROM, Page 0 at `0x00E0`), aligning Libelle with Apis, Haar, and Walrus. The provisioning table and avrdude part will update accordingly. See [Project-Libelle issue #20](https://github.com/NorthernWidget-Skunkworks/Project-Libelle/issues/20).
+
 > **Known bug in deployed firmware:** The firmware writes UVB starting at register 0x07; the library reads it from 0x06. This causes `getUVB()` to return approximately true_UVB × 256. All historical UVB data is affected. See [Project-Libelle issue #18](https://github.com/NorthernWidget-Skunkworks/Project-Libelle/issues/18).
 
 ### Liasis (longwave pyrgeometer)
