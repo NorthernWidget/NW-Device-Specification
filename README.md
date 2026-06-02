@@ -397,7 +397,7 @@ Block 1–3 (0x48–0x5F)   Reserved
 Block 0:  Schema=0x01, Name='H','a','a','r',0x00,0x00,0x00
 Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=[mfr], 0x00,0x00,0x00, Reserved
 Block 2:  Board type=0x4801 ('H'=0x48, rev 1), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
-Block 3:  Reserved, Magic=0x00, CRC=[computed], I2C address=0x42
+Block 3:  Reserved, Magic=0x00, CRC=[computed], I2C address=0x48
 ```
 
 #### Page 1 (0x20–0x3F) — Sensor data
@@ -443,7 +443,7 @@ Unit rationale: 0.01 hPa is the natural meteorological unit and aligns with the 
 Block 0:  Schema=0x01, Name='W','a','l','r','u','s',0x00
 Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=[mfr], 0x00,0x00,0x00, Reserved
 Block 2:  Board type=0x5702 ('W'=0x57, rev 2), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
-Block 3:  Reserved, Magic=0x00, CRC=[computed], I2C address=0x4D
+Block 3:  Reserved, Magic=0x00, CRC=[computed], I2C address=0x57
 ```
 
 #### Page 1 (0x20–0x3F) — Sensor data
