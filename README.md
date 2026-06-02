@@ -646,6 +646,27 @@ Controller-only devices (Margay, Okapi) have no current peripheral address; entr
 
 ---
 
+## Schema 1 implementation status
+
+Tracks whether each device's library/firmware and hardware have been updated for Schema 1, and whether the combination has been verified.
+
+| Device | Library / firmware | Hardware | Integration check | Physical test |
+|--------|--------------------|----------|-------------------|---------------|
+| Apis | — | — | — | — |
+| Haar | — | — | — | — |
+| Walrus | — | — | — | — |
+| Libelle | — | — | — | — |
+| Liasis | — | — | — | — |
+| Margay | — | — | — | — |
+| Okapi | — | — | — | — |
+
+**Library / firmware:** library updated to build and serve Schema 1 Page 0; `begin()` validates schema byte.
+**Hardware:** new board revision tagged (if required); Page 0 EEPROM provisioned via nw-provision.
+**Integration check:** register map verified against this spec; library compiles against it; data types confirmed.
+**Physical test:** library and hardware tested together on real hardware; data confirmed correct end-to-end.
+
+---
+
 ## License
 
 This specification is released under the [Creative Commons Attribution-ShareAlike 4.0 International License](LICENSE) (CC BY-SA 4.0).
