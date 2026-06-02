@@ -139,9 +139,18 @@ Page 0 is written once at manufacture by a dedicated programmer sketch. Producti
 
 ### Page 2
 
-Page 2 EEPROM placement is **not yet decided**. Considerations differ from Page 0: calibration data may be written in the field, updated per deployment, or re-calibrated by a user. Placement will be specified once the write-pattern requirements are better understood across devices.
+Page 2 is stored immediately below Page 0: `EEPROM[length−64]` through `EEPROM[length−33]`. This placement applies the same protection rationale as Page 0 — persistent data at the top of EEPROM is safe from sequential writes that start at address 0.
 
-Device-specific EEPROM usage (outside Pages 0 and 2) must stay **below** `EEPROM[length−32]`.
+```cpp
+#define PAGE2_BASE  (EEPROM.length() - 64)
+
+// Read byte at I²C register offset i (0x40–0x5F), mapped to Page 2:
+EEPROM.read(PAGE2_BASE + (i - 0x40))
+```
+
+Page 2 contents are device-specific and defined in each device's appendix. Devices with no calibration data have all 32 bytes reserved (`0xFF` unprogrammed or `0x00` by convention).
+
+Device-specific EEPROM usage (outside Pages 0 and 2) must stay **below** `EEPROM[length−64]`.
 
 ---
 
