@@ -117,7 +117,11 @@ Template, not base class: no vtable, no dependency on Core. Samples reach the ca
 
 **Defects found while reading (fix regardless):** T9602 library discards the chip's valid/stale bits; Libelle library reads registers without checking the firmware's ready flag.
 
-## 6. Names *(library side decided; firmware casing decided; four names open)*
+## 6. Names *(library side decided; firmware casing decided; four names open; two proposals held)*
+
+**Vocabulary (2026-09-20):** a *measurement* is a quantity the sensor reports (pressure, range); a *sample* is one acquisition of it at one moment; *raw* is a sample before conversion (the chip's indication, e.g. ADC counts – exists only inside firmware `acquire()` or a controller-bus library's `updateMeasurements()`); the *register value* is the wire form (scaled integer per the appendix); the *value* is the float in the field. *Reading* is retired as a noun; *read* stays as the verb for the bus (`readByte`, `readPage`).
+
+**Held for later discussion (Claude's proposals, not decided):** (a) renaming the triad `beginRawReadings/takeRawReading/endRawReadings` + `RAW_MAX_BYTES` to `beginSamples/writeSample/endSamples` + `SAMPLE_MAX_BYTES`, with `appendValue` → `writeValue`, `setNRangeReadings` → `setNRangeSamples`, `NW_READING_*` → `NW_ALL` + `<LIB>_<GROUP>`, `collectRawReadings` → `collectSamples`, `newData()` → `ready()`; (b) splitting register-address constants from bit masks (`NW_REG_*` / `NW_BIT_*`). Until decided, the existing names stand.
 
 Provenance: *exists* = in the code today; *rename* = the operation exists under another name; *new* = nothing does this yet.
 
