@@ -109,7 +109,8 @@ Template, not base class: no vtable, no dependency on Core. Samples reach the ca
 - Universal **control register at Page 1 last byte, 0x3F** (mirroring the address register at 0x1F ending Page 0). Bit 0 = trigger, written by controller, self-clearing. Bits 1–7 = device-specific configuration (absorbs Walrus/Libelle update-rate bits and Apis sensitivity bits into a fixed position).
 - **Ready (0x20 bit 0)** = set by the device when the data registers hold a complete measurement; cleared by the device the moment a measurement begins. A trigger therefore clears ready and the controller waits for it to return.
 - **Free-running stays legal** as an option a device may add (Libelle's 800 ms auto-range is the one candidate), not a pattern of its own. Note: a device timer is a second clock that can only be out of phase with the logger's, and spends power on unread samples.
-- Counters (Tally): same handshake; the appendix states that a sample is *latch-and-clear* (an accumulation, not an instant).
+- Counters (Tally): same handshake; a trigger means *latch*, not latch-and-clear. The data field is a monotonic `uint32` event count since power-up (wraps); the controller keeps the last value it logged and takes the difference, so a failed read loses nothing. 32 bits because Tally also fronts anemometers (100 pulses/s wraps 16 bits in 11 min). Tally should stay powered between logging events (it has its own supercapacitor).
+- **Sample counter vs event count.** The Block 0 sample counter counts *measurements* (one per latch on Tally, one per conversion elsewhere). The event count is Tally's *data*. They are never conflated.
 - Stream and pin devices: no register to attach to; the one-sample primitive holds by frame or by read.
 
 **Firmware cost:** Walrus and Libelle already have a `StartSample` flag their timer sets – the trigger is one line in `receiveEvent()`. Haar's `Sample` bit and Tally's `SAMPLE` bit *are* this design at a different address – they move. Apis gets what #17 asks for. The `acquire()` split and the Page 0/Page 1 serving are the rest of each firmware's Schema 1 work.
@@ -152,6 +153,8 @@ Withdrawn: `RunningStats`/`Welford` struct (statistics are functions over the sa
 - Anything drafted in conversation is a proposal until it is in a repo; existing code is the reference.
 
 ## 8. Work plan
+
+**Tally is on the list** (added 2026-09-20; it was absent from the spec, NW-Provision, NW-Registry, and the snapshot issue). It is the family's event counter and the device that stresses the convention most.
 
 **Order:** Walrus first (furthest along: Page 1 done in firmware and library after the Schema 0 snapshot tags; remaining Project-Walrus #15–#18 are exactly the generic part). Haar second, to prove the template with a different chip set on the same MCU. Then Apis (needs #17), Libelle (waits on hardware v0.3, #20–#23), Liasis (no MCU, #2). Controller-bus and stream libraries (NW_BME280, T9602, MS5803, MaxBotix, Tally, TP-Downhole) get Layers 2–3 only, in any order.
 
