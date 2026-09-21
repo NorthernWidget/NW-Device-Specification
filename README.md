@@ -705,31 +705,39 @@ Block 2 directly maps the existing 8-byte Schema 0 EEPROM serial number with no 
 
 If Margay ever gains an I²C peripheral interface, `0x4D` (ASCII `'M'`) is the natural address. The layout below exposes the data a higher-level device would most need: current time, battery state, onboard environment, and logger status.
 
+Subsystem table (same index rules as a sensor's chip table):
+
+| Index | Subsystem |
+|-------|-----------|
+| 0 | SD card |
+| 1 | DS3231M RTC |
+| 2 | BME280 onboard environment |
+| 3 | Sensor bus |
+| 4 | Battery |
+
+Block 0 (0x20–0x27) is the universal block. Config (0x26): reserved. Logger state continues on Page 3.
+
 ```
-Block 0 (0x20–0x27)   System status + battery
-  0x20        Status (bit 0=ready, bit 1=SD fault, bit 2=RTC fault,
-                      bit 3=onboard fault, bit 4=sensor fault,
-                      bit 5=battery warning, bit 6=battery error,
-                      bit 7=pan-fault)
-  0x21        Extended faults (reserved, 0x00)
-  0x22        Battery %, uint8, 0–100
-  0x23–0x24   Battery voltage, uint16, 0.01 V
-  0x25–0x27   Reserved
+Block 1 (0x28–0x2F)   Battery
+  0x28        Battery %, uint8, 0–100
+  0x29–0x2A   Battery voltage, uint16, 0.01 V
+  0x2B–0x2F   Reserved
 
-Block 1 (0x28–0x2F)   BME280 — onboard environment
-  0x28–0x29   Temperature, int16, 0.01 °C
-  0x2A–0x2B   Humidity, uint16, 0.01 %RH
-  0x2C–0x2F   Pressure, uint32, 0.01 hPa
+Block 2 (0x30–0x37)   BME280 — onboard environment
+  0x30–0x31   Temperature, int16, 0.01 °C
+  0x32–0x33   Humidity, uint16, 0.01 %RH
+  0x34–0x37   Pressure, uint32, 0.01 hPa
 
-Block 2 (0x30–0x37)   DS3231M — RTC
-  0x30–0x33   Timestamp, uint32, Unix time (seconds since 1970-01-01 UTC)
-  0x34–0x35   Temperature, int16, 0.01 °C
-  0x36–0x37   Reserved
+Block 3 (0x38–0x3F)   DS3231M — RTC
+  0x38–0x3B   Timestamp, uint32, Unix time (seconds since 1970-01-01 UTC)
+  0x3C–0x3D   Temperature, int16, 0.01 °C
+  0x3E–0x3F   Reserved
 
-Block 3 (0x38–0x3F)   Logger state
-  0x38–0x39   External interrupt count, uint16, accumulated
-  0x3A–0x3B   Log file number, uint16
-  0x3C–0x3F   Log interval, uint32, seconds
+Page 3, Block 0 (0x60–0x67)   Logger state
+  0x60–0x61   External interrupt count, uint16, accumulated
+  0x62–0x63   Log file number, uint16
+  0x64–0x67   Log interval, uint32, seconds
+Page 3, Blocks 1–3 (0x68–0x7F)   Reserved
 ```
 
 No Page 2. Battery curve coefficients and Steinhart–Hart thermistor constants are hardcoded in the library.
