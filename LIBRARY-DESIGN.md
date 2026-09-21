@@ -19,9 +19,9 @@ Two other threads meet here: the Schema 1 register map (NW-Device-Specification)
  ┌───────────────────────────────────────────────────────────────────────────────┐
  │ Layer 3  API  – identical in every library, derived from the named fields     │
  │   bool begin(adr)          getHeader()   getString()   getX() accessors        │
- │   beginRawReadings(c)  takeRawReading(buf,o)  endRawReadings()  RAW_MAX_BYTES  │
+ │   beginReadings(c)  writeReading(Print&)  endReadings()                        │
  ├───────────────────────────────────────────────────────────────────────────────┤
- │ Layer 2  SAMPLE – the one per-sensor function, plus named per-measurement     │
+ │ Layer 2  READING – the one per-sensor function, plus named per-measurement    │
  │   bool updateMeasurements()      arrays:  int16_t _range[CAP]; uint8_t _nRange │
  │        ┌──────────────────┬──────────────────────┬──────────────────────┐      │
  │        │ Schema 1 device  │ chip on controller   │ stream / pin         │      │
@@ -30,10 +30,10 @@ Two other threads meet here: the Schema 1 register map (NW-Device-Specification)
  │        └──────────────────┴──────────────────────┴──────────────────────┘      │
  ├───────────────────────────────────────────────────────────────────────────────┤
  │ Layer 1  HANDSHAKE – one pattern for every register-addressed NW device       │
- │   requestSample() → newData() poll with timeoutGlobal → readPage(0x20)         │
+ │   requestReading() → ready() poll with timeoutGlobal → readPage(0x20)          │
  ├───────────────────────────────────────────────────────────────────────────────┤
  │ Layer 0  PRIMITIVES – Bobby's helpers, camelCased, one signature each         │
- │   readByte writeByte readWord readWordLE writeWordLE  joinInt16/32  appendValue│
+ │   readByte writeByte readWord readWordLE writeWordLE  joinInt16/32             │
  └───────────────────────────────────────────────────────────────────────────────┘
                                         │ I²C
                           DEVICE SIDE (ATtiny firmware, Schema 1 sensors only)
@@ -42,8 +42,8 @@ Two other threads meet here: the Schema 1 register map (NW-Device-Specification)
  │                                          │  0x22.. data,  0x3F control (prop.)  │
  ├───────────────────────────────────────────────────────────────────────────────┤
  │ Handshake mirror – same in every firmware                                       │
- │   receiveEvent: write to NW_CTRL with bit0 → startSample = true                 │
- │   loop: if startSample { ready=0; acquire(); splitAndLoad…; ready=1; clear }    │
+ │   receiveEvent: write to NW_CTRL with bit0 → startReading = true                 │
+ │   loop: if startReading { ready=0; acquire(); splitAndLoad…; ready=1; clear }    │
  ├───────────────────────────────────────────────────────────────────────────────┤
  │ acquire() – the only chip-specific firmware code (MS5803 / SHT31 / LiDAR …)    │
  └───────────────────────────────────────────────────────────────────────────────┘
@@ -52,49 +52,49 @@ Two other threads meet here: the Schema 1 register map (NW-Device-Specification)
 Three invariants make this a template rather than a style guide:
 
 1. **The bus is touched in exactly two library functions:** `begin()` for identity and `updateMeasurements()` for data. Every accessor is a field read. (Today Walrus touches the bus in four places, Libelle in nine.)
-2. **`updateMeasurements()` returns `bool` and means "the named fields now hold one valid sample."** Schema 1: false on bus error, timeout, or pan-fault. Chip on the controller's bus: false on whatever the chip's validity signal says. Callers never need to know which.
+2. **`updateMeasurements()` returns `bool` and means "the named fields now hold one valid reading."** Schema 1: false on bus error, timeout, or pan-fault. Chip on the controller's bus: false on whatever the chip's validity signal says. Callers never need to know which.
 3. **Output functions are pure formatting of the fields.** Acceptance test for the first pass on every library: `getHeader()` and `getString()` output is byte-identical before and after, for the same register bytes.
 
-## 3. Data model: samples *(decided)*
+## 3. Data model: readings *(decided)*
 
 - **Each measurement is its own named, statically sized array** with a valid-count: `int16_t _range[APIS_RANGE_CAPACITY]; uint8_t _nRange;`. Not a vector across measurements, not an N×V matrix.
 - **Capacity is a per-measurement compile-time constant** chosen by the library author (default 1; e.g. Apis range 64), overridable by the sketch before the include: `#define APIS_RANGE_CAPACITY 200`. No heap allocation, ever. A runtime request above capacity is clamped and reported, never silently truncated.
 - **At capacity 1 the array costs the same as a scalar** (Walrus: three measurements, 12 bytes). This is the ordinary case.
-- **Consumers, all reading the same array:** `getRange()` = latest valid sample; `getRangeMean()/Std()/Sterr()` computed two-pass over valid samples at output time (no separate running-stats struct – withdrawn); a median or trimmed mean is another function over the same array; `setNRangeReadings(n)` clamps and stores the count.
-- **Sample count is per measurement group**, set by the sketch (Apis: range N, orientation 1). `beginRawReadings(component)` selects the group; Apis already has `NW_READING_ALL / _RANGE / _ORIENT` and `setNRangeReadings()`.
+- **Consumers, all reading the same array:** `getRange()` = latest valid reading; `getRangeMean()/Std()/Sterr()` computed two-pass over valid readings at output time (no separate running-stats struct – withdrawn); a median or trimmed mean is another function over the same array; `setNRangeReadings(n)` clamps and stores the count.
+- **Reading count is per measurement group**, set by the sketch (Apis: range N, orientation 1). `beginRawReadings(component)` selects the group; Apis already has `NW_READING_ALL / _RANGE / _ORIENT` and `setNRangeReadings()`.
 
-## 3a. Statistics over samples *(decided 2026-09-21)*
+## 3a. Statistics over readings *(decided 2026-09-21)*
 
 - **Where:** in the sensor library, generically for every library; prototyped on Apis (the only library with N > 1 today). Not in firmware (no float hardware, 1 KB RAM, grows the register map) and not in the logger (would need a numeric field interface the sensors do not have). The statistics functions are the clearest `NorthernWidget_Core` candidate.
-- **Which:** mean, standard deviation, standard error (as Apis has), plus **median** (needs the sample array, which exists), plus the **count of valid samples** as distinct from the count requested. Nothing fancier now; get the machinery running.
-- **Independence prerequisite:** N samples are only independent once the firmware has the trigger and/or the sample counter. Until then N samples of Apis are N copies and statistics over them are meaningless. Consequence for the Apis order: series 1 (library shape refactor, byte-identical) leaves statistics exactly as they are; the statistics machinery is exercised only after series 2 (firmware) lands. The valid-sample count is how the library refuses to report duplicates as samples.
+- **Which:** mean, standard deviation, standard error (as Apis has), plus **median** (needs the reading array, which exists), plus the **count of valid readings** as distinct from the count requested. Nothing fancier now; get the machinery running.
+- **Independence prerequisite:** N readings are only independent once the firmware has the trigger and/or the reading counter. Until then N readings of Apis are N copies and statistics over them are meaningless. Consequence for the Apis order: series 1 (library shape refactor, byte-identical) leaves statistics exactly as they are; the statistics machinery is exercised only after series 2 (firmware) lands. The valid-reading count is how the library refuses to report duplicates as readings.
 - **Row width follows configuration** (Apis's existing behaviour: statistics columns appear in `getHeader()`/`getString()` only when enabled). Not considered hazardous. Rule: configuration is set before the header is written and does not change mid-file.
 - **Precision:** two-pass over the array in 32-bit float; adequate for N up to the static capacities; document this in code comments wherever the statistics are computed (Andy: "ensure to add comments on the precision").
-- **Out of scope for now:** per-library time and power estimates for N samples (a useful future enhancement).
+- **Out of scope for now:** per-library time and power estimates for N readings (a useful future enhancement).
 
-## 4. The one-sample primitive and its two consumers *(decided)*
+## 4. The one-reading primitive and its two consumers *(decided)*
 
-`takeRawReading(buf, offset)` takes **one** sample and appends its values, each followed by a comma, into a caller-owned buffer; returns the new offset. Each library declares `static constexpr uint16_t RAW_MAX_BYTES` = most bytes one call can write (Apis documents 25 today in a comment).
+`writeReading(Print& out)` takes **one** reading and prints its values, each followed by a comma, to any Arduino `Print` (an SdFat `File`, `Serial`, or a `BufferPrint`); returns bytes written. No buffer, no offset, no maximum-bytes constant: SdFat batches into its own sector cache.
 
 Consumers:
-- **Fixed-width summary** – `getString()`: runs its own loop of N single samples, formats latest value and/or statistics. Unchanged output in first pass.
+- **Fixed-width summary** – `getString()`: runs its own loop of N single readings, formats latest value and/or statistics. Unchanged output in first pass.
 - **Report-all** – the logger-side template (Margay_Library #27; **not yet written**):
 
 ```cpp
 template<typename S>
-void collectRawReadings(S& s, uint16_t n, uint8_t component = NW_READING_ALL) {
-    s.beginRawReadings(component);
+void collectReadings(S& s, uint16_t n, File& raw, uint8_t component = NW_READING_ALL) {
+    s.beginReadings(component);
     for (uint16_t i = 0; i < n; i++) {
-        if (o + S::RAW_MAX_BYTES > sizeof(buf)) { raw.write(buf, o); o = 0; }  // never straddle the sector
-        o = s.takeRawReading(buf, o);
+        raw.print(timestamp); raw.print(','); raw.print(S::NAME); raw.print(',');   // logger-side layout, decided later
+        s.writeReading(raw);
+        raw.println();
     }
-    s.endRawReadings();
+    s.endReadings();
 }
-// buf[512] = one SD sector; o = offset; raw = File
 ```
-Template, not base class: no vtable, no dependency on Core. Samples reach the card before the next one is taken; N is bounded by card space and patience, not memory. Row layout (one wide line per logging event vs. one line per sample) is an open choice; either way the raw file is separate from the main log.
+Template, not base class: no vtable, no dependency on Core. Each reading reaches SdFat's sector cache before the next is taken; N is bounded by card space and patience, not memory. Row layout (one wide line per logging event vs. one line per reading) is an open choice; either way the raw file is separate from the main log.
 
-**Prerequisite for independent samples:** the device must produce a fresh measurement per request. Today only Haar and Tally do (see §5). This is Project-Apis #17 generalized.
+**Prerequisite for independent readings:** the device must produce a fresh measurement per request. Today only Haar and Tally do (see §5). This is Project-Apis #17 generalized.
 
 ## 5. Handshake convention *(proposed – needs Andy's decision and a spec change)*
 
@@ -117,10 +117,10 @@ Template, not base class: no vtable, no dependency on Core. Samples reach the ca
 **Proposal:**
 - Universal **control register at Page 1 last byte, 0x3F** (mirroring the address register at 0x1F ending Page 0). Bit 0 = trigger, written by controller, self-clearing. Bits 1–7 = device-specific configuration (absorbs Walrus/Libelle update-rate bits and Apis sensitivity bits into a fixed position).
 - **Ready (0x20 bit 0)** = set by the device when the data registers hold a complete measurement; cleared by the device the moment a measurement begins. A trigger therefore clears ready and the controller waits for it to return.
-- **Free-running stays legal** as an option a device may add (Libelle's 800 ms auto-range is the one candidate), not a pattern of its own. Note: a device timer is a second clock that can only be out of phase with the logger's, and spends power on unread samples.
+- **Free-running stays legal** as an option a device may add (Libelle's 800 ms auto-range is the one candidate), not a pattern of its own. Note: a device timer is a second clock that can only be out of phase with the logger's, and spends power on unread readings.
 - Counters (Tally): same handshake; a trigger means *latch*, not latch-and-clear. The data field is a monotonic `uint32` event count since power-up (wraps); the controller keeps the last value it logged and takes the difference, so a failed read loses nothing. 32 bits because Tally also fronts anemometers (100 pulses/s wraps 16 bits in 11 min). Tally should stay powered between logging events (it has its own supercapacitor).
-- **Sample counter vs event count.** The Block 0 sample counter counts *measurements* (one per latch on Tally, one per conversion elsewhere). The event count is Tally's *data*. They are never conflated.
-- Stream and pin devices: no register to attach to; the one-sample primitive holds by frame or by read.
+- **Reading counter vs event count.** The Block 0 reading counter counts *measurements* (one per latch on Tally, one per conversion elsewhere). The event count is Tally's *data*. They are never conflated.
+- Stream and pin devices: no register to attach to; the one-reading primitive holds by frame or by read.
 
 **Firmware cost:** Walrus and Libelle already have a `StartSample` flag their timer sets – the trigger is one line in `receiveEvent()`. Haar's `Sample` bit and Tally's `SAMPLE` bit *are* this design at a different address – they move. Apis gets what #17 asks for. The `acquire()` split and the Page 0/Page 1 serving are the rest of each firmware's Schema 1 work.
 
@@ -128,9 +128,11 @@ Template, not base class: no vtable, no dependency on Core. Samples reach the ca
 
 ## 6. Names *(library side decided; firmware casing decided; four names open; two proposals held)*
 
-**Vocabulary (2026-09-20):** a *measurement* is a quantity the sensor reports (pressure, range); a *sample* is one acquisition of it at one moment; *raw* is a sample before conversion (the chip's indication, e.g. ADC counts – exists only inside firmware `acquire()` or a controller-bus library's `updateMeasurements()`); the *register value* is the wire form (scaled integer per the appendix); the *value* is the float in the field. *Reading* is retired as a noun; *read* stays as the verb for the bus (`readByte`, `readPage`).
+**Vocabulary (2026-09-20):** a *measurement* is a quantity the sensor reports (pressure, range); a *reading* is one acquisition of every measurement the sensor reports, at one moment (Andy, 2026-09-21: "reading"; "observation" also acceptable; "sample" rejected for its statistical double meaning – a reading is also a *set* of observations); *raw* is a reading before conversion (the chip's indication, e.g. ADC counts – exists only inside firmware `acquire()` or a controller-bus library's `updateMeasurements()`); the *register value* is the wire form (scaled integer per the appendix); the *value* is the float in the field. *Reading* is not used. *Read* is the verb for the bus (`readByte`, `readPage`); a *reading* is what one read of the instrument yields.
 
-**Held for later discussion (Claude's proposals, not decided):** (a) renaming the triad `beginRawReadings/takeRawReading/endRawReadings` + `RAW_MAX_BYTES` to `beginSamples/writeSample/endSamples` + `SAMPLE_MAX_BYTES`, with `appendValue` → `writeValue`, `setNRangeReadings` → `setNRangeSamples`, `NW_READING_*` → `NW_ALL` + `<LIB>_<GROUP>`, `collectRawReadings` → `collectSamples`, `newData()` → `ready()`; (b) splitting register-address constants from bit masks (`NW_REG_*` / `NW_BIT_*`). Until decided, the existing names stand.
+**Decided 2026-09-21 (names):** the triad becomes `beginReadings(component)` / `writeReading(Print& out)` / `endReadings()` – "Raw" dropped, and the caller-owned buffer + offset replaced by an Arduino `Print` destination (SdFat `File` and `Serial` are both `Print`; `Print::print(float)` is allocation-free; SdFat batches into its own 512-byte sector cache – verified against AVR core 1.8.6 and the workspace SdFat). This removes `RAW_MAX_BYTES`, the straddle guard, and `appendValue`/`writeValue` entirely. `setNRangeReadings` → `setRangeReadings` (infix N dropped). `newData()` stays as a deprecated alias of `ready()` (reads the ready bit; behaviour unchanged); the counter-based freshness check is a new function `newReading()`. `requestReading()` on the library (the controller requests); `startReading` flag in firmware (the device starts). Logger-side template `collectReadings(sensor, n, component)`. For an in-memory destination, an 8-line `BufferPrint : public Print` adapter that owns its length and refuses overflow.
+
+**Held (Claude's proposals, not decided):** the `NW_` constants – `NW_READING_*` group selectors (Apis; written in a May Claude session) and the register-address / bit-mask constants (`NW_STATUS`, `NW_CTRL`, `NW_TRIGGER`, …): one prefix or three (`NW_REG_*` / `NW_BIT_*`), and per-library selectors (`APIS_ALL`, `APIS_RANGE`).
 
 Provenance: *exists* = in the code today; *rename* = the operation exists under another name; *new* = nothing does this yet.
 
@@ -140,22 +142,21 @@ Provenance: *exists* = in the code today; *rename* = the operation exists under 
 | 0 | `writeByte` | `bool writeByte(uint8_t adr, uint8_t reg, uint8_t val)` | rename of `WriteByte` |
 | 0 | `readWord` / `readWordLE` / `writeWordLE` | as today | rename of `ReadWord`, `ReadWord_LE`, `WriteWord_LE` (underscore dropped) |
 | 0 | `readPage` | `bool readPage(uint8_t adr, uint8_t page, uint8_t buf[32])` | **new** |
-| 0 | `joinInt16` / `joinInt32` | `int16_t joinInt16(const uint8_t* p)` (little-endian) | **new**; inverse of firmware `splitAndLoad`. *Open: vs `loadInt16`* |
-| 0 | `appendValue` | `uint16_t appendValue(char* buf, uint16_t o, float v, uint8_t decimals)` | **new**. *Open* |
+| 0 | `joinInt16` / `joinInt32` / `joinUint16` | `int16_t joinInt16(const uint8_t* p)` (little-endian) | **new**; inverse of firmware `splitAndLoad` (`load` rejected: already means the device loading its registers) |
 | 0 | `timeoutGlobal` | member | exists (Haar, Walrus); Tally's `GlobalTimeout` → this |
-| 1 | `newData` | `bool newData()` | exists (Haar, Walrus); polls ready |
-| 1 | `requestSample` | `bool requestSample()` | **new**; writes trigger. *Open: vs `startSample` (matches firmware flag)* |
+| 1 | `ready` | `bool ready()` | rename of `newData()` (Haar, Walrus), kept as deprecated alias; polls the ready bit |
+| 1 | `requestReading` | `bool requestReading()` | **new**; writes the trigger bit |
+| 1 | `newReading` | `bool newReading()` | **new**; true when the reading counter has advanced since the last stored reading |
 | 2 | `updateMeasurements` | `bool updateMeasurements()` | exists (Apis, Haar, T9602); others gain it |
 | 3 | `begin` | `bool begin(uint8_t adr = ADR_DEFAULT)` | exists; return type → bool; Schema 1: checks schema byte 0x01 + name |
 | 3 | `getHeader` / `getString` / accessors | unchanged | exist |
-| 3 | triad | as in Apis | exists (Apis, NW_BME280) |
-| 3 | `RAW_MAX_BYTES` | `static constexpr uint16_t` | **new** |
-| 3 | `NW_READING_ALL` etc. | `uint8_t` | exists (Apis) |
+| 3 | `beginReadings` / `writeReading(Print&)` / `endReadings` | one reading per `writeReading` call | rename of `beginRawReadings/takeRawReading/endRawReadings` (Apis, NW_BME280); deprecated aliases |
+| 3 | `NW_READING_ALL` etc. | `uint8_t` | exists (Apis, May Claude session); prefix question held |
 | 3 | `<LIB>_<MEAS>_CAPACITY` | `#define`, default 1 | **new** |
 
-Withdrawn: `RunningStats`/`Welford` struct (statistics are functions over the sample array); opt-in per-measurement arrays (arrays are always present, capacity 1 by default).
+Withdrawn: `RunningStats`/`Welford` struct (statistics are functions over the reading array); opt-in per-measurement arrays (arrays are always present, capacity 1 by default).
 
-**Firmware** (camelCase too – Andy: "we will follow conventions here"): `readByte writeByte readWord readWordLE writeWordLE splitAndLoad` (renames); `startSample` (rename of `StartSample`; Haar's `Sample` → this); `timeoutGlobal` (rename of `GlobalTimeout`); `NW_CTRL NW_STATUS NW_TRIGGER` (new; replace Walrus/Libelle `CTRL` = 0x00); `acquire()` (new; or Walrus's `getValues` renamed). Tally firmware: not yet read.
+**Firmware** (camelCase too – Andy: "we will follow conventions here"): `readByte writeByte readWord readWordLE writeWordLE splitAndLoad` (renames); `startReading` (rename of `StartSample`; Haar's `Sample` → this); `timeoutGlobal` (rename of `GlobalTimeout`); `NW_CTRL NW_STATUS NW_TRIGGER` (new; replace Walrus/Libelle `CTRL` = 0x00); `acquire()` (new; or Walrus's `getValues` renamed). Tally firmware: not yet read.
 
 ## 7. Conventions *(decided)*
 
@@ -183,9 +184,9 @@ Withdrawn: `RunningStats`/`Welford` struct (statistics are functions over the sa
 
 1. Trigger register address: 0x3F as proposed?
 2. Ready-bit semantics as proposed (cleared at start of measurement)?
-3. Names: `joinInt16` vs `loadInt16`; `appendValue`; `requestSample` vs `startSample`.
+3. Names: `joinInt16` vs `loadInt16`; `appendValue`; `requestReading` vs `startReading`.
 4. First pass on Walrus: library with `trigger` omitted first (works against today's free-running firmware), or firmware trigger in the same series?
-5. Report-all row layout: one wide line per logging event, or one line per sample with a sensor label.
+5. Report-all row layout: one wide line per logging event, or one line per reading with a sensor label.
 6. Whether the triad is required on every sensor library (it costs ~5 lines once arrays exist; my recommendation: yes, uniformly).
 7. Header string format (separators, trailing comma) – explicitly deferred by Andy.
 8. ~~Apis statistics columns~~ – decided 2026-09-21, see §3a.
