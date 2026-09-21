@@ -129,13 +129,14 @@ Every hardware repo must have:
 One commit per item:
 
 1. **Version** — bump version in README and schematic title block using the `HWmajor.HWminor.FWversion` convention (see below)
-2. **Fabrication outputs** — regenerate Gerbers, drill file, and BOM from the release-tagged source; commit under `fab/`
-3. **Schematic PDF** — export and commit
-4. **Errata and version notes** — update README with any known issues on this board revision
-5. **NW-Registry** — add a new row to [`NW-Registry/board_types.csv`](https://github.com/NorthernWidget/NW-Registry) for the new board type if this is a new hardware version (see [address registry](https://github.com/NorthernWidget/NW-Device-Specification) for Schema 1 board type assignment)
-6. **DOI badge** — replace any deprecated `latestdoi`/`GITHUB_REPO_ID` format; use concept DOI (ask maintainer; never guess)
-7. **`CITATION.cff`** — create or update
-8. **`.zenodo.json`** — create or update; `upload_type: other`
+2. **Firmware version in the patch slot** — for every hardware release, with or without a firmware change: the tag's `FWversion` digit equals the firmware's compiled patch constant (e.g. `FW_FW_PATCH`), which the firmware writes to Page 0 byte `0x0A` and the library checks in `begin()`. If they differ, fix the constant (and reflash/bench) before tagging; never tag a firmware that reports a different patch than its tag.
+3. **Fabrication outputs** — regenerate Gerbers, drill file, and BOM from the release-tagged source; commit under `fab/`
+4. **Schematic PDF** — export and commit
+5. **Errata and version notes** — update README with any known issues on this board revision
+6. **NW-Registry** — add a new row to [`NW-Registry/board_types.csv`](https://github.com/NorthernWidget/NW-Registry) for the new board type if this is a new hardware version (see [address registry](https://github.com/NorthernWidget/NW-Device-Specification) for Schema 1 board type assignment)
+7. **DOI badge** — replace any deprecated `latestdoi`/`GITHUB_REPO_ID` format; use concept DOI (ask maintainer; never guess)
+8. **`CITATION.cff`** — create or update
+9. **`.zenodo.json`** — create or update; `upload_type: other`
 
 ## Version numbering
 
