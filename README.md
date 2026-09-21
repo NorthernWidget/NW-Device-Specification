@@ -763,6 +763,34 @@ Controller-only devices (Margay, Okapi) have no current peripheral address; entr
 | Okapi | Controller (hypothetical) | — | `0x4F` | `'O'` | **Reserved.** Controller only; no peripheral interface yet |
 | Walrus | Peripheral | `0x4D` primary, `0x41` alt | `0x57` | `'W'` | ⚠ Current `0x4D` must change — clashes with proposed Margay; address is software-configurable via EEPROM |
 
+### Bus occupancy
+
+The registry above lists NW devices. A sensor shares the bus with the logger's on-board chips as well, so the table below lists every address in use or reserved across the family, from the device appendices, the logger READMEs, the Okapi v1.0 schematic, and the sensor libraries. Chips whose address is set by pin strapping are marked; their actual strapping has not yet been read from the schematic (see the to-do below).
+
+| Address | NW device (Schema 1) | Logger on-board chips | Chips driven by a sensor library on the controller bus |
+|---------|----------------------|-----------------------|--------------------------------------------------------|
+| `0x0C` | Libelle DOWN | Okapi: MLX90393 magnetometer (`0x0C`–`0x0F`, by strapping) | |
+| `0x10`–`0x1F` | | Okapi: PAC1934 (by strapping); VEML6030 if strapped to `0x10` | Libelle v1: ADXL343 at `0x1D` |
+| `0x18`/`0x19` | | Okapi: BMA456 accelerometer (by strapping) | |
+| `0x20` | | Okapi: MCP23018 I/O expander | |
+| `0x28` | | | T9602 |
+| `0x41` | **Apis** | | |
+| `0x48` | **Haar** | **Okapi: ADS1115 (on-board); VEML6030 if strapped to `0x48`** | |
+| `0x49` | | Okapi: ADS1115 (off-board channels) | |
+| `0x4A` | | | Liasis: ADS1115 |
+| `0x4C` | Libelle UP | | |
+| `0x4D` | Margay (reserved, hypothetical) | | |
+| `0x4F` | Okapi (reserved, hypothetical) | | |
+| `0x50`–`0x57` | **Walrus `0x57`**; Apis legacy `0x50` | **Okapi: MB85RC FRAM (`0x50`–`0x57`, by strapping)** | |
+| `0x62` | | Okapi: MCP4725 DAC | |
+| `0x68` | | Margay, Okapi: DS3231 RTC | |
+| `0x69`–`0x6B` | | Margay: MCP3421 ADC (by model) | |
+| `0x76`/`0x77` | | Margay, Okapi: BME280 | |
+
+**Potential clashes, pending the Okapi strapping:** Haar `0x48` against Okapi's on-board ADS1115 (and VEML6030 if strapped high); Walrus `0x57` against the FRAM's range. Whether either bites also depends on whether Okapi's on-board I²C segment is electrically joined to the sensor segment when the external bus is switched on. Okapi is a prototype under revision, so restrapping a chip is cheap; moving Haar or Walrus is not.
+
+**To do:** read the ADDR strapping of the ADS1115, VEML6030, PAC1934, MB85RC, and BMA456 from the Okapi v1.0 schematic and the segment-switch topology, fill in this table, and resolve the two potential clashes. Tracked in [Project-Okapi issue #29](https://github.com/NorthernWidget-Skunkworks/Project-Okapi/issues/29).
+
 ### Clashes requiring resolution
 
 1. **Walrus `0x4D` → Margay `'M'` = `0x4D`:** Walrus must migrate to `0x57` (`'W'`) in Schema 1. This is a breaking change to existing deployments.
