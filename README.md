@@ -406,7 +406,7 @@ Chip table (index used by status bits 1–6, control chip-select bits 1–6, and
 
 | Index | Chip | Measurements |
 |-------|------|--------------|
-| 0 | LiDAR Lite v3 | range, signal strength |
+| 0 | LiDAR Lite v3HP | range, signal strength |
 | 1 | LIS3DH accelerometer | X, Y, Z |
 
 Block 0 (0x20–0x27) is the universal block. Config (0x26): bits 1:0 = LiDAR sensitivity (as the former register 0x25); bits 7:2 reserved. Firmware patch 1 clears the sleep bit without sleeping (implementation deferred) and free-runs every 100 ms in addition to answering triggers.
