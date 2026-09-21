@@ -507,20 +507,29 @@ Block 3:  Reserved, Magic=0x4E, CRC=[computed], I2C address=0x57
 
 #### Page 1 (0x20–0x3F) — Sensor data
 
-```
-Block 0 (0x20–0x27)   MS5803 — pressure + temperature
-  0x20        Status (bit 0=ready, bit 1=MS5803 fault, bit 2=ext temp fault,
-                      bit 7=pan-fault)
-  0x21        Extended faults (reserved, 0x00)
-  0x22–0x25   Pressure, int32, µBar, little-endian
-  0x26–0x27   Temp MS5803, int16, 0.01 °C, little-endian
+Chip table:
 
-Block 1 (0x28–0x2F)   MCP9808 — external temperature
-  0x28–0x29   Temp ext, int16, 0.01 °C, little-endian
-  0x2A–0x2F   Reserved
+| Index | Chip | Measurements |
+|-------|------|--------------|
+| 0 | MS5803 | pressure, temperature |
+| 1 | MCP9808 | external (water) temperature |
 
-Block 2–3 (0x30–0x3F)   Reserved
+Block 0 (0x20–0x27) is the universal block. Config (0x26): bits 1:0 = free-running update period, 0 = 5 s, 1 = 10 s, 2 = 60 s, 3 = 300 s (as the former control register 0x00); bits 7:2 reserved.
+
 ```
+Block 1 (0x28–0x2F)   MS5803 — pressure + temperature
+  0x28–0x2B   Pressure, int32, µBar, little-endian
+  0x2C–0x2D   Temp MS5803, int16, 0.01 °C, little-endian
+  0x2E–0x2F   Reserved
+
+Block 2 (0x30–0x37)   MCP9808 — external temperature
+  0x30–0x31   Temp ext, int16, 0.01 °C, little-endian
+  0x32–0x37   Reserved
+
+Block 3 (0x38–0x3F)   Reserved
+```
+
+> **Migration note:** the firmware and library on `master` (June 2026, unreleased) serve this data from 0x22 with the earlier two-byte Block 0. They move to 0x28 with the universal Block 0 before the Walrus Schema 1 release.
 
 No Page 2. MS5803 calibration coefficients are read from its internal PROM at startup; MCP9808 is factory-calibrated.
 
