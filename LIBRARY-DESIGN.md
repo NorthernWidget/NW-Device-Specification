@@ -42,7 +42,7 @@ Two other threads meet here: the Schema 1 register map (NW-Device-Specification)
  │                                          │  0x22.. data,  0x3F control (prop.)  │
  ├───────────────────────────────────────────────────────────────────────────────┤
  │ Handshake mirror – same in every firmware                                       │
- │   receiveEvent: write to NW_CTRL with bit0 → startReading = true                 │
+ │   receiveEvent: write to REG_CTRL with bit0 → startReading = true                 │
  │   loop: if startReading { ready=0; acquire(); splitAndLoad…; ready=1; clear }    │
  ├───────────────────────────────────────────────────────────────────────────────┤
  │ acquire() – the only chip-specific firmware code (MS5803 / SHT31 / LiDAR …)    │
@@ -140,7 +140,10 @@ Template, not base class: no vtable, no dependency on Core. Each reading reaches
 
 **Decided 2026-09-21 (names):** the triad becomes `beginReadings(component)` / `printReading(Print& out)` [+ shortcut `logReading`] / `endReadings()` – "Raw" dropped, and the caller-owned buffer + offset replaced by an Arduino `Print` destination (SdFat `File` and `Serial` are both `Print`; `Print::print(float)` is allocation-free; SdFat batches into its own 512-byte sector cache – verified against AVR core 1.8.6 and the workspace SdFat). This removes `RAW_MAX_BYTES`, the straddle guard, and `appendValue`/`writeValue` entirely. `setNRangeReadings` → `setRangeReadings` (infix N dropped). `newData()` stays as a deprecated alias of `ready()` (reads the ready bit; behaviour unchanged); the counter-based freshness check is a new function `newReading()`. `requestReading()` on the library (the controller requests); `startReading` flag in firmware (the device starts). Logger-side template `collectReadings(sensor, n, component)`. For an in-memory destination, an 8-line `BufferPrint : public Print` adapter that owns its length and refuses overflow.
 
-**Held (Claude's proposals, not decided):** the `NW_` constants – `NW_READING_*` group selectors (Apis; written in a May Claude session) and the register-address / bit-mask constants (`NW_STATUS`, `NW_CTRL`, `NW_TRIGGER`, …): one prefix or three (`NW_REG_*` / `NW_BIT_*`), and per-library selectors (`APIS_ALL`, `APIS_RANGE`).
+**Decided 2026-09-21: no `NW_` prefix.** Following the convention Adafruit's libraries use (a few true globals carry the *library's* name, `BME280_ADDRESS`; options are class-scoped enums, `Adafruit_BME280::MODE_FORCED`):
+- Group selectors are class-scoped enums: `Apis::ALL`, `Apis::RANGE`, `Apis::ORIENT`; `Walrus::MS5803`, `Walrus::MCP9808`, `Walrus::ALL`. The existing `NW_READING_*` macros in Apis (May 2026) stay as deprecated aliases.
+- Register addresses and bit masks (`REG_STATUS 0x20`, `REG_CTRL 0x21`, `REG_COUNTER 0x22`, `REG_FAULTS 0x27`, `BIT_READY`, `BIT_TRIGGER`, `BIT_PANFAULT`) are implementation details: file-local constants in each library's `.cpp`, same names everywhere, no public name. Firmware sketches use the same names as plain `#define`s.
+- `NW_` is the prefix for exactly one thing: names exported by `NorthernWidget_Core` once it exists (it is Core's library name); the register constants move there and gain the prefix then. `NW_BME280` is a library name, not a constant.
 
 Provenance: *exists* = in the code today; *rename* = the operation exists under another name; *new* = nothing does this yet.
 
@@ -159,12 +162,12 @@ Provenance: *exists* = in the code today; *rename* = the operation exists under 
 | 3 | `begin` | `bool begin(uint8_t adr = ADR_DEFAULT)` | exists; return type → bool; Schema 1: checks schema byte 0x01 + name |
 | 3 | `getHeader` / `getString` / accessors | unchanged | exist |
 | 3 | `beginReadings` / `printReading(Print&)` / `endReadings`; shortcut `logReading(Print&)` | print the stored reading; `logReading` takes then prints | rename of `beginRawReadings/takeRawReading/endRawReadings` (Apis, NW_BME280); deprecated aliases |
-| 3 | `NW_READING_ALL` etc. | `uint8_t` | exists (Apis, May Claude session); prefix question held |
+| 3 | `Apis::ALL` / `Apis::RANGE` / `Apis::ORIENT` (class-scoped enum) | group selectors | rename of `NW_READING_*` (Apis, May Claude session); deprecated aliases |
 | 3 | `<LIB>_<MEAS>_CAPACITY` | `#define`, default 1 | **new** |
 
 Withdrawn: `RunningStats`/`Welford` struct (statistics are functions over the reading array); opt-in per-measurement arrays (arrays are always present, capacity 1 by default).
 
-**Firmware** (camelCase too – Andy: "we will follow conventions here"): `readByte writeByte readWord readWordLE writeWordLE splitAndLoad` (renames); `startReading` (rename of `StartSample`; Haar's `Sample` → this); `timeoutGlobal` (rename of `GlobalTimeout`); `NW_CTRL NW_STATUS NW_TRIGGER` (new; replace Walrus/Libelle `CTRL` = 0x00); `acquire()` (new; or Walrus's `getValues` renamed). Tally firmware: not yet read.
+**Firmware** (camelCase too – Andy: "we will follow conventions here"): `readByte writeByte readWord readWordLE writeWordLE splitAndLoad` (renames); `startReading` (rename of `StartSample`; Haar's `Sample` → this); `timeoutGlobal` (rename of `GlobalTimeout`); `REG_STATUS REG_CTRL REG_COUNTER REG_FAULTS BIT_READY BIT_TRIGGER BIT_PANFAULT` (new plain defines; replace Walrus/Libelle `CTRL` = 0x00); `acquire()` (new; or Walrus's `getValues` renamed). Tally firmware: not yet read.
 
 ## 7. Conventions *(decided)*
 
