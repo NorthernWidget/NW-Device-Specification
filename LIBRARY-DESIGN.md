@@ -6,6 +6,25 @@
 
 ---
 
+## 0. The design in one page *(read this first; sections 1–10 are the record of how it was reached)*
+
+**Vocabulary.** A *measurement* is a quantity a sensor reports (pressure, range). A *reading* is one acquisition of every measurement at one moment. A *chip* is one sensing IC on the board; the *sensor* (unit) is the whole NW device. A measurement *group* is a chip; `ALL` is the unit. *Raw* is a reading before conversion. "Sample" is not used.
+
+**Every sensor library has the same shape** (Apis_Library is the built reference, §6a):
+- `bool begin(adr)` – I²C ACK; for Schema 1 devices reads Page 0 Blocks 0–1 and requires schema 0x01, the device name, and firmware patch ≥ the library's minimum; `getHardwareMajor()`, `getHardwareMinor()`, `getFirmwareVersion()` say what was read.
+- `bool updateMeasurements(component = ALL)` – the one function that touches the bus for data; takes one reading of every chip or one chip alone; per-chip functions where a device has them (`updateRange()`, `updateOrientation()`). Each reading is *requested* (`requestReading(component)` writes trigger + chip-select to the control byte) and *waited for* (the reading counter advances), so N readings are N measurements.
+- `get<Field>()` accessors read fields, never the bus. Readings are kept in named per-measurement static arrays (`<LIB>_<FIELD>_CAPACITY`, default 1, no heap); `get<Field>Mean/Std/Sterr/Median()` are two-pass over them; `set<Field>Readings(n)` clamps to capacity; `get<Field>Count()` is the valid count.
+- `getHeader()` / `getString()` – one CSV row (String); width follows configuration. `printHeader(Print&)`, `printReading(Print&)` (stored reading, never acquires), `logReading(Print&)` (one reading, then print) – to an SdFat `File`, `Serial`, or a `BufferPrint`; no buffers, no offsets. `beginReadings(component)` / `endReadings()` bracket a run. **Required on every sensor library.**
+- `ready()`, `newReading()`; `faulted(chip)`, `anyFault()`, `faultChip()`, `faultKind()`, `printFault(Print&)`.
+- Missing value on file: `-9999` (one named constant); Apis keeps `-9998` "not measured" until replaced.
+- Names: Arduino style everywhere, libraries and firmware; camelCase; class-scoped enums for selectors (`Apis::RANGE`); register constants file-local; no `NW_` prefix except for what Core exports. Casing migration is two steps (camelCase with `[[deprecated]]` aliases, then removal) – but a name already removed is never re-added; consumers migrate forward.
+
+**Device side (NW-Device-Specification, normative in its README).** Page 0 identity from EEPROM (top 32 bytes, CRC-8, magic 0x4E, address at 0x1F). Page 1 Block 0 universal: 0x20 status (ready, per-chip faults, pan-fault) · 0x21 control (trigger, chip select, sleep) · 0x22–0x23 reading counter · 0x24–0x25 reserved for its extension · 0x26 device config · 0x27 latched fault (chip index + kind), cleared by any control write. Data from 0x28; Page 3 continues data past 24 bytes. Only 0x21 and 0x26 writable; page rewrite atomic; ready clears when a reading starts and sets with the counter increment.
+
+**Order.** Apis (done on master, untested) → bench test → Walrus → Haar → Core from what reproduces. Held/deferred: Tally list, header string format, sleep-bit firmware (TWI wake), Apis run model (next task), time/power estimates.
+
+---
+
 ## 1. Goal (Andy's framing)
 
 Every sensor has the same C++ library interface (`begin`, `getHeader`, `getString`, …) so that end users interact with one pattern and make fewer errors. Everything follows Arduino convention, uniformly and consistently. Preserve the existing code and the voices of its authors (Bobby, Chad, Andy, et al.); edits slip in as minimal, non-convoluted changes.
@@ -234,7 +253,7 @@ Walrus and Haar should copy this shape; what is identical across the three becom
 
 **Spec:** add §5's control register and ready semantics; fix `Magic=0x00` → 0x4E in all seven appendices; add Tally appendix (latch-and-clear).
 
-## 9. Open decisions (Andy)
+## 9. Open decisions (Andy) *(historical list; as of 2026-09-22 everything below is decided except item 7, which Andy deferred)*
 
 1. ~~Trigger register address~~ – decided: CONTROL at 0x21 (Block 0 above).
 2. ~~Ready-bit semantics~~ – decided as proposed; nothing on Page 1 touches EEPROM.
