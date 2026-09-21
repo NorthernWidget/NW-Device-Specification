@@ -231,6 +231,10 @@ Withdrawn: `RunningStats`/`Welford` struct (statistics are functions over the re
 
 ## 10. Deferred
 
+- **Sleep bit firmware implementation (TWI address-match wake).** The bit is defined in the spec (Page 1 control byte, bit 7) and stays. Implementing it in firmware depends on the ATtiny1634 TWI slave waking the part from power-down on address match; to be implemented and bench-tested later, not in Apis series 2 (Andy, 2026-09-21).
+- **How Apis runs** (free-running 100 ms cycle with LiDAR power-cycling): kept for now; Andy's priority to revisit as soon as the Block 0 decisions are closed.
+- **Series 3 `begin()` gates:** schema byte 0x01, name, and firmware patch ≥ `APIS_FW_MIN_PATCH`; plus `getHardwareVersion()` / `getFirmwareVersion()` so a sketch can report why `begin()` refused (Andy, 2026-09-21).
+
 - `NorthernWidget_Core` and the `NorthernWidget` bundle library: after Walrus + Haar (+ one more) are converted; contents = whatever is identical across them.
 - Firmware-side shared code: same question, same timing.
 - Libelle ATtiny841 → ATtiny1634 migration (Project-Libelle #20); Liasis MCU (#2).
