@@ -194,6 +194,18 @@ Withdrawn: `RunningStats`/`Welford` struct (statistics are functions over the re
 
 **Firmware** (camelCase too – Andy: "we will follow conventions here"): `readByte writeByte readWord readWordLE writeWordLE splitAndLoad` (renames); `startReading` (rename of `StartSample`; Haar's `Sample` → this); `timeoutGlobal` (rename of `GlobalTimeout`); `REG_STATUS REG_CTRL REG_COUNTER REG_FAULTS BIT_READY BIT_TRIGGER BIT_PANFAULT` (new plain defines; replace Walrus/Libelle `CTRL` = 0x00); `acquire()` (new; or Walrus's `getValues` renamed). Tally firmware: not yet read.
 
+## 6a. As built in Apis (the reference implementation, 2026-09-21)
+
+Where Apis_Library differs from the names table above, Apis is the reference and the table is the plan:
+- Bus helpers are private: `_readBytes(reg, buf, n)` and `_writeByte(reg, val)`; no public `readByte`/`readPage`. Register addresses and bit masks are file-local in `Apis.cpp`; the public header carries only the API, sentinels, `APIS_RANGE_CAPACITY`/`APIS_ORIENT_CAPACITY`, and `APIS_FW_MIN_PATCH`.
+- Version getters: `getHardwareMajor()`, `getHardwareMinor()`, `getFirmwareVersion()` (not one packed `getHardwareVersion()`).
+- Handshake: `ready()`, `newReading()`, `requestReading(component)`; `newData()` does not exist in Apis (no alias needed).
+- Readings: `updateRange()`/`updateOrientation()` are the per-chip single-reading functions (each triggers and waits via the counter); `updateMeasurements(component)` takes N of them; `logReading` uses the former.
+- Faults: `faulted(chip)`, `anyFault()`, `faultChip()`, `faultKind()`, `printFault(Print&)`.
+- Statistics: two-pass over `_rangeReadings[]`/`_pitchReadings[]`/`_rollReadings[]`; `getRangeMedian()` etc.; `setRangeReadings()`/`setOrientReadings()` clamp and return the value set; `timeoutGlobal` is a private member (500 ms), as in Haar.
+- Deprecated but kept: `beginRawReadings/takeRawReading/endRawReadings`, `setNRangeReadings/setNOrientReadings`, `NW_READING_*`.
+Walrus and Haar should copy this shape; what is identical across the three becomes `NorthernWidget_Core`.
+
 ## 7. Conventions *(decided)*
 
 - Arduino style throughout, libraries and firmware: camelCase functions/variables, PascalCase classes, UPPER_CASE constants, no underscores in public names (→ Libelle `getIR_Mid`, `getIR_Short` renamed with deprecated aliases), leading underscore on private members as Apis does.
