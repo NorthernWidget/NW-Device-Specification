@@ -453,21 +453,27 @@ Block 3:  Reserved, Magic=0x4E, CRC=[computed], I2C address=0x48
 
 #### Page 1 (0x20–0x3F) — Sensor data
 
+Chip table:
+
+| Index | Chip | Measurements |
+|-------|------|--------------|
+| 0 | SHT31 | temperature, relative humidity |
+| 1 | LPS35HW | pressure, temperature |
+
+Block 0 (0x20–0x27) is the universal block. Config (0x26): no bits defined; write 0x00.
+
 ```
-Block 0 (0x20–0x27)   SHT31 — temperature + humidity
-  0x20        Status (bit 0=ready, bit 1=SHT31 fault, bit 2=LPS35HW fault,
-                      bit 7=pan-fault)
-  0x21        Extended faults (reserved, 0x00)
-  0x22–0x23   Temp SHT31, int16, 0.01 °C, little-endian
-  0x24–0x25   Humidity, uint16, 0.01 % RH, little-endian
-  0x26–0x27   Reserved
+Block 1 (0x28–0x2F)   SHT31 — temperature + humidity
+  0x28–0x29   Temp SHT31, int16, 0.01 °C, little-endian
+  0x2A–0x2B   Humidity, uint16, 0.01 % RH, little-endian
+  0x2C–0x2F   Reserved
 
-Block 1 (0x28–0x2F)   LPS35HW — pressure + temperature
-  0x28–0x2B   Pressure, uint32, 0.01 hPa, little-endian
-  0x2C–0x2D   Temp LPS35HW, int16, 0.01 °C, little-endian
-  0x2E–0x2F   Reserved
+Block 2 (0x30–0x37)   LPS35HW — pressure + temperature
+  0x30–0x33   Pressure, uint32, 0.01 hPa, little-endian
+  0x34–0x35   Temp LPS35HW, int16, 0.01 °C, little-endian
+  0x36–0x37   Reserved
 
-Block 2–3 (0x30–0x3F)   Reserved
+Block 3 (0x38–0x3F)   Reserved
 ```
 
 No Page 2. Both sensors are factory-calibrated; no user calibration step.
