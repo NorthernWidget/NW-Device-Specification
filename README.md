@@ -773,7 +773,7 @@ Controller-only devices (Margay, Okapi) have no current peripheral address; entr
 
 ## Controller-side library design
 
-How a controller's Arduino library reads a Schema 1 device – the layered library shape, the one-sample raw-reading primitive, the proposed universal control register, and the naming conventions – is described in [LIBRARY-DESIGN.md](LIBRARY-DESIGN.md). It is preliminary; its §5 proposes a change to Page 1 that will be folded into this document once decided.
+How a controller's Arduino library reads a Schema 1 device – the layered library shape, the one-sample raw-reading primitive, the proposed universal control register, and the naming conventions – is described in [LIBRARY-DESIGN.md](LIBRARY-DESIGN.md). Its handshake proposal is now the Page 1 Block 0 definition above; the rest is the library-side design and its work plan.
 
 ---
 
