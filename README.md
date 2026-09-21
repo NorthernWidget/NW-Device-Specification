@@ -562,36 +562,47 @@ Block 3:  Reserved, Magic=0x4E, CRC=[computed], I2C address=0x4C (UP) or 0x0C (D
 
 #### Page 1 (0x20–0x3F) — Sensor data
 
+Chip table:
+
+| Index | Chip | Measurements |
+|-------|------|--------------|
+| 0 | VEML6075 | UVA, UVB |
+| 1 | VEML6030 | ambient light, white |
+| 2 | ADS1115 | IR short, IR mid, thermistor temperature |
+| 3 | ADXL343 | X, Y, Z (hardware v2 only) |
+
+Block 0 (0x20–0x27) is the universal block. Config (0x26): bits 1:0 = free-running update period (0 = 5 s, 1 = 10 s, 2 = 60 s, 3 = 300 s); bit 2 = auto-range disable (0 = auto-range each reading, as the former control register); bit 3 = run auto-range once now (self-clearing); bits 7:4 reserved.
+
+Libelle carries 26 bytes of data, more than Blocks 1–3 hold, so the accelerometer continues on Page 3.
+
 ```
-Block 0 (0x20–0x27)   VEML6030 — visible light
-  0x20        Status (bit 0=ready, bit 1=VEML6075 fault,
-                      bit 2=VEML6030 fault, bit 3=ADS1115 fault,
-                      bit 7=pan-fault)
-  0x21        Extended faults (reserved, 0x00)
-  0x22–0x23   ALS, uint16, raw VEML6030 counts, little-endian
-  0x24–0x25   White, uint16, raw VEML6030 counts, little-endian
-  0x26–0x27   Lux mult, uint16, auto-range scaler (ALS × mult × 0.0036 → lux)
+Block 1 (0x28–0x2F)   VEML6030 — visible light
+  0x28–0x29   ALS, uint16, raw VEML6030 counts, little-endian
+  0x2A–0x2B   White, uint16, raw VEML6030 counts, little-endian
+  0x2C–0x2D   Lux mult, uint16, auto-range scaler (ALS × mult × 0.0036 → lux)
+  0x2E–0x2F   Reserved
 
-Block 1 (0x28–0x2F)   VEML6075 — UV
-  0x28–0x2B   UVA, int32, compensated counts, little-endian
-  0x2C–0x2F   UVB, int32, compensated counts, little-endian
+Block 2 (0x30–0x37)   VEML6075 — UV
+  0x30–0x33   UVA, int32, compensated counts, little-endian
+  0x34–0x37   UVB, int32, compensated counts, little-endian
 
-Block 2 (0x30–0x37)   ADS1115 — IR + temperature
-  0x30–0x31   IR Short, uint16, raw ADC counts (×1.25e-4 → V)
-  0x32–0x33   IR Mid, uint16, raw ADC counts (×1.25e-4 → V)
-  0x34–0x35   Temperature, uint16, raw ADC counts (Steinhart-Hart → °C)
-  0x36–0x37   Reserved
-
-Block 3 (0x38–0x3F)   ADXL343 — accelerometer (hardware v2 only)
-  0x38–0x39   Accel X, int16, little-endian
-  0x3A–0x3B   Accel Y, int16, little-endian
-  0x3C–0x3D   Accel Z, int16, little-endian
+Block 3 (0x38–0x3F)   ADS1115 — IR + temperature
+  0x38–0x39   IR Short, uint16, raw ADC counts (×1.25e-4 → V)
+  0x3A–0x3B   IR Mid, uint16, raw ADC counts (×1.25e-4 → V)
+  0x3C–0x3D   Temperature, uint16, raw ADC counts (Steinhart-Hart → °C)
   0x3E–0x3F   Reserved
+
+Page 3, Block 0 (0x60–0x67)   ADXL343 — accelerometer (hardware v2 only)
+  0x60–0x61   Accel X, int16, little-endian
+  0x62–0x63   Accel Y, int16, little-endian
+  0x64–0x65   Accel Z, int16, little-endian
+  0x66–0x67   Reserved
+Page 3, Blocks 1–3 (0x68–0x7F)   Reserved
 ```
 
 No Page 2. Calibration constants (Steinhart-Hart coefficients, UV cross-talk compensation) are hardcoded in the library. If per-unit calibration is added, Page 2 is the natural home.
 
-> **Hardware v1 note:** The ADXL343 accelerometer is wired to the controller I2C bus (addresses 0x1D / 0x53) and is not bridged through the ATtiny register map. Block 3 is reserved on v1 hardware. Hardware v2 will move the ADXL343 to the ATtiny software I2C bus, enabling single-address access. See [Project-Libelle issue #19](https://github.com/NorthernWidget-Skunkworks/Project-Libelle/issues/19).
+> **Hardware v1 note:** The ADXL343 accelerometer is wired to the controller I2C bus (addresses 0x1D / 0x53) and is not bridged through the ATtiny register map. Page 3 is not served on v1 hardware. Hardware v2 will move the ADXL343 to the ATtiny software I2C bus, enabling single-address access. See [Project-Libelle issue #19](https://github.com/NorthernWidget-Skunkworks/Project-Libelle/issues/19).
 
 > **Planned MCU migration:** Hardware v2 is proposed to migrate from the ATtiny841 (512 B EEPROM, Page 0 at `0x01E0`) to the ATtiny1634 (256 B EEPROM, Page 0 at `0x00E0`), aligning Libelle with Apis, Haar, and Walrus. The provisioning table and avrdude part will update accordingly. See [Project-Libelle issue #20](https://github.com/NorthernWidget-Skunkworks/Project-Libelle/issues/20).
 
