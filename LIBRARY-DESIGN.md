@@ -63,6 +63,15 @@ Three invariants make this a template rather than a style guide:
 - **Consumers, all reading the same array:** `getRange()` = latest valid sample; `getRangeMean()/Std()/Sterr()` computed two-pass over valid samples at output time (no separate running-stats struct – withdrawn); a median or trimmed mean is another function over the same array; `setNRangeReadings(n)` clamps and stores the count.
 - **Sample count is per measurement group**, set by the sketch (Apis: range N, orientation 1). `beginRawReadings(component)` selects the group; Apis already has `NW_READING_ALL / _RANGE / _ORIENT` and `setNRangeReadings()`.
 
+## 3a. Statistics over samples *(decided 2026-09-21)*
+
+- **Where:** in the sensor library, generically for every library; prototyped on Apis (the only library with N > 1 today). Not in firmware (no float hardware, 1 KB RAM, grows the register map) and not in the logger (would need a numeric field interface the sensors do not have). The statistics functions are the clearest `NorthernWidget_Core` candidate.
+- **Which:** mean, standard deviation, standard error (as Apis has), plus **median** (needs the sample array, which exists), plus the **count of valid samples** as distinct from the count requested. Nothing fancier now; get the machinery running.
+- **Independence prerequisite:** N samples are only independent once the firmware has the trigger and/or the sample counter. Until then N samples of Apis are N copies and statistics over them are meaningless. Consequence for the Apis order: series 1 (library shape refactor, byte-identical) leaves statistics exactly as they are; the statistics machinery is exercised only after series 2 (firmware) lands. The valid-sample count is how the library refuses to report duplicates as samples.
+- **Row width follows configuration** (Apis's existing behaviour: statistics columns appear in `getHeader()`/`getString()` only when enabled). Not considered hazardous. Rule: configuration is set before the header is written and does not change mid-file.
+- **Precision:** two-pass over the array in 32-bit float; adequate for N up to the static capacities; document this in code comments wherever the statistics are computed (Andy: "ensure to add comments on the precision").
+- **Out of scope for now:** per-library time and power estimates for N samples (a useful future enhancement).
+
 ## 4. The one-sample primitive and its two consumers *(decided)*
 
 `takeRawReading(buf, offset)` takes **one** sample and appends its values, each followed by a comma, into a caller-owned buffer; returns the new offset. Each library declares `static constexpr uint16_t RAW_MAX_BYTES` = most bytes one call can write (Apis documents 25 today in a comment).
@@ -179,7 +188,7 @@ Withdrawn: `RunningStats`/`Welford` struct (statistics are functions over the sa
 5. Report-all row layout: one wide line per logging event, or one line per sample with a sensor label.
 6. Whether the triad is required on every sensor library (it costs ~5 lines once arrays exist; my recommendation: yes, uniformly).
 7. Header string format (separators, trailing comma) – explicitly deferred by Andy.
-8. Apis statistics columns in `getString()` – a deliberate second change after the byte-identical first pass.
+8. ~~Apis statistics columns~~ – decided 2026-09-21, see §3a.
 
 ## 10. Deferred
 
