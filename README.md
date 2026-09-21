@@ -402,23 +402,27 @@ Legacy deployed units carry board type `0x6C00` and I²C address `0x50` (pre-Sch
 
 #### Page 1 (0x20–0x3F) — Sensor data
 
+Chip table (index used by status bits 1–6, control chip-select bits 1–6, and the fault byte):
+
+| Index | Chip | Measurements |
+|-------|------|--------------|
+| 0 | LiDAR Lite v3 | range, signal strength |
+| 1 | LIS2DH12 accelerometer | X, Y, Z |
+
+Block 0 (0x20–0x27) is the universal block. Config (0x26): bits 1:0 = LiDAR sensitivity (as the former register 0x25); bits 7:2 reserved.
+
 ```
-Block 0 (0x20–0x27)   LiDAR
-  0x20        Status (bit 0=ready, bit 1=LiDAR fail, bit 2=accel fail,
-                      bit 7=pan-fault)
-  0x21        Extended faults (reserved, 0x00)
-  0x22–0x23   Range [cm], little-endian int16
-  0x24        Signal strength, uint8
-  0x25        Config: sensitivity [bits 1:0], writable
-  0x26–0x27   Reserved
+Block 1 (0x28–0x2F)   LiDAR Lite
+  0x28–0x29   Range [cm], little-endian int16
+  0x2A        Signal strength, uint8
+  0x2B–0x2F   Reserved
 
-Block 1 (0x28–0x2F)   Accelerometer
-  0x28–0x29   Accel X, little-endian int16
-  0x2A–0x2B   Accel Y, little-endian int16
-  0x2C–0x2D   Accel Z, little-endian int16
-  0x2E–0x2F   Reserved
+Block 2 (0x30–0x37)   Accelerometer
+  0x30–0x31   Accel X, little-endian int16
+  0x32–0x33   Accel Y, little-endian int16
+  0x34–0x35   Accel Z, little-endian int16
+  0x36–0x37   Reserved
 
-Block 2 (0x30–0x37)   Reserved
 Block 3 (0x38–0x3F)   Reserved
 ```
 
