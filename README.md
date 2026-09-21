@@ -109,6 +109,7 @@ Pages are 32-byte aligned:
 | Page 0 | 0x00–0x1F   | Identity (this document)  | Persistent (EEPROM or equivalent) |
 | Page 1 | 0x20–0x3F   | Sensor data               | SRAM (runtime) |
 | Page 2 | 0x40–0x5F   | Calibration               | Persistent (EEPROM or equivalent) |
+| Page 3 | 0x60–0x7F   | Sensor data, continued (devices with more than 24 bytes of data) | SRAM (runtime) |
 | Page N | …           | Future use                | TBD |
 
 The schema byte (Page 0, address 0x00) declares which pages a device exposes.
@@ -300,22 +301,68 @@ uint8_t crc8_smbus(const uint8_t *data, uint8_t len) {
 
 ## Page 1 — Sensor data
 
-32 bytes, SRAM-backed, updated every measurement cycle. Device-specific; defined per device type.
+32 bytes, SRAM-backed, rewritten by the device on every reading. Block 0 is universal — identical in meaning on every NW device — and Blocks 1–3 (0x28–0x3F, 24 bytes) carry the device's data, defined per device type in its appendix. A device with more than 24 bytes of data continues on Page 3 (see [Address space](#address-space)).
 
-The first byte (0x20) is always the **status byte**:
+A *reading* is one acquisition of every measurement the device reports, at one moment. A *chip* is one sensing IC on the board; each appendix numbers its chips in a fixed order, and that index is used by the status, control, and fault bytes below.
+
+### Block 0 (0x20–0x27) — Status and control
 
 ```
-Bit  Meaning
-  0  Ready: 0 = initialising or between measurements; 1 = measurement valid
-1–6  Device-specific failure flags (0 = nominal)
-  7  Pan-fault: set whenever any bit 1–6 is set; 0 = all-clear
+Address  Field         Access      Contents
+  0x20   Status        read-only   bit 0    ready:      1 = data registers hold a complete reading
+                       (live)      bits 1–6 chip fault: bit n set = chip n−1 is faulted now
+                                   bit 7    pan-fault:  OR of bits 1–6
+  0x21   Control       writable    bit 0    trigger:     controller writes 1 to request a reading;
+                                                         the device clears it when the reading starts
+                                   bits 1–6 chip select: bit n set = measure chip n−1 on the next
+                                                         reading; power-up value = every chip present
+                                   bit 7    sleep:       device enters its lowest-power state after
+                                                         this transaction, wakes on its next I²C
+                                                         address match, and clears the bit
+  0x22   Reading       read-only   uint16, little-endian. Incremented by one when ready is set.
+  0x23   counter                   0 after power-up. Wraps at 65535.
+  0x24   Reserved      —           Reserved for extending the reading counter to 24 or 32 bits.
+  0x25   Reserved      —           Nothing else may be assigned here.
+  0x26   Config        writable    Device-specific configuration, 8 bits defined by the appendix.
+                                   0x00 = the device's defaults. Volatile: the controller sets it
+                                   after every power-up. A device needing more than 8 bits of
+                                   configuration places the rest in its own data area, never here.
+  0x27   Fault         read-only   Latched code for the most recent fault; 0x00 = none.
+                       (latched)   bits 7–5 chip index (0–6), or 7 = the unit itself
+                                   bits 4–0 kind (table below)
 ```
 
-A controller reads all 32 bytes of Page 1 in one transaction. The status byte is checked first; if bit 0 is clear, the remaining bytes are stale and should not be used. Bit 7 provides a generic fault summary without requiring the controller to know device-specific bit assignments.
+**Fault kinds** (bits 4–0 of 0x27):
 
-The second byte of Block 0, **0x21, is reserved as the extended fault byte** across all devices. Firmware must write it as 0x00 unless a device appendix defines its bits. Placing it immediately after the status byte keeps all fault information contiguous — a controller reads 0x20–0x21 to get the complete fault picture. Sensor data begins at 0x22.
+| Kind | Meaning |
+|------|---------|
+| 0 | No fault |
+| 1 | Chip did not acknowledge on its bus |
+| 2 | Conversion timeout |
+| 3 | Checksum or CRC failure reported by the chip |
+| 4 | Value outside the chip's valid range |
+| 5 | Chip not initialised or failed self-test |
+| 6 | Device reset since the controller last wrote Control (configuration lost) |
+| 7 | Configuration write rejected |
+| 8 | Supply or power-good fault |
+| 9–15 | Reserved, universal |
+| 16–31 | Device-specific, defined in the appendix |
 
-Sensor-specific layouts for Page 1 are defined in per-device appendices.
+**Rules**
+
+- **Writable bytes.** Only 0x21 and 0x26 accept writes on Page 1. Firmware checks the register address in its receive handler and ignores writes elsewhere.
+- **Ready and the counter.** The device clears ready the moment a reading begins, whether triggered by the controller or started by the device's own timer, and sets it when the data registers are complete. The reading counter increments at that same moment, after the data is in place, so a controller that reads the counter and the data in one transaction never sees a new count with old data.
+- **Atomic rewrite.** The device rewrites the data registers and increments the counter with interrupts disabled, so a page read never straddles a rewrite.
+- **Trigger.** A trigger written while a reading is in progress stays set and is honoured when the current reading completes. A trigger written while ready is set starts a new reading and clears ready, so the controller never confuses the previous reading with the one it requested. A device may also start readings on its own schedule; the trigger adds one immediate reading without changing that schedule.
+- **Live versus latched.** Status bits 1–6 show which chips are faulted *now* and clear when the chip next succeeds. The fault byte at 0x27 holds the most recent fault until the controller acknowledges it, so a fault that cleared itself between readings remains visible. Any write to Control acknowledges: it clears 0x27 to 0x00. A controller that triggers readings therefore acknowledges on every request; one that only reads a free-running device acknowledges whenever it sets chip select or sleep.
+- **Sleep.** After a transaction that sets bit 7, the device completes the transaction, then enters its lowest-power state. The ATtiny TWI slave wakes on address match, so no timer is needed; the first transaction after waking may see a delayed acknowledge.
+- **Power-up state.** Status 0x00 (not ready), Control with every present chip selected, counter 0, Config 0x00, Fault 0x00 unless initialisation itself failed.
+
+A controller reads all 32 bytes of Page 1 in one transaction, checks ready first, then the pan-fault bit, and only then uses the data. Bit 7 gives a fault summary without the controller knowing the device's chip assignments; 0x27 gives the detail when it wants it.
+
+### Blocks 1–3 (0x28–0x3F) — Device data
+
+Defined per device in the appendices. Values are little-endian, in the types and scaled units the appendix states. Each appendix also provides a numbered **chip table**, which fixes the index used by the status fault bits, the control chip-select bits, and the fault byte.
 
 ---
 
