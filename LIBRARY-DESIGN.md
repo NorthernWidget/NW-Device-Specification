@@ -19,7 +19,7 @@ Two other threads meet here: the Schema 1 register map (NW-Device-Specification)
  ┌───────────────────────────────────────────────────────────────────────────────┐
  │ Layer 3  API  – identical in every library, derived from the named fields     │
  │   bool begin(adr)          getHeader()   getString()   getX() accessors        │
- │   beginReadings(c)  writeReading(Print&)  endReadings()                        │
+ │   beginReadings(c)  printReading(Print&)  logReading(Print&)  endReadings()    │
  ├───────────────────────────────────────────────────────────────────────────────┤
  │ Layer 2  READING – the one per-sensor function, plus named per-measurement    │
  │   bool updateMeasurements()      arrays:  int16_t _range[CAP]; uint8_t _nRange │
@@ -72,9 +72,17 @@ Three invariants make this a template rather than a style guide:
 - **Precision:** two-pass over the array in 32-bit float; adequate for N up to the static capacities; document this in code comments wherever the statistics are computed (Andy: "ensure to add comments on the precision").
 - **Out of scope for now:** per-library time and power estimates for N readings (a useful future enhancement).
 
+## 3b. The triad, precisely *(decided 2026-09-21)*
+
+- **Required on every sensor library** (Andy). The caller is the reason: `collectReadings` is a template over any sensor type and can only be one if every sensor has the same three names.
+- **Taking and printing are separate acts with separate names.** `updateMeasurements()` takes one reading into the fields (the existing name in Apis, Haar, T9602; it says exactly what happens to the object). `printReading(Print& out)` prints the *stored* reading, each value followed by a comma, and returns bytes written; it never acquires. *Print*, not *write*: in Arduino `Print`, `write()` emits raw bytes and `print()` emits formatted text. A shortcut `logReading(Print& out)` = `updateMeasurements()` then `printReading(out)`. `getString()` is the same shortcut for a `String` destination and keeps its current behaviour (it acquires first) for byte-identical output in the first pass. `printHeader(Print&)` beside `getHeader()` for symmetry.
+- **Components are per-chip groups, on every library** (Andy: uniformity). Each library declares one measurement group per on-board chip (Walrus: MS5803, MCP9808; Haar: SHT31, LPS35HW; Apis: LiDAR = range, LIS2DH12 = orientation), plus ALL as the default. This aligns three things that were already per-chip: the status-byte fault bits, the firmware's `acquire()` steps, and the per-group reading count. On Schema 1 devices a single Page 1 read still delivers every chip; the group only selects which fields are printed and which arrays receive N readings. Groups become useful where chips differ in cost or wanted count (Apis, Libelle) and cost nothing elsewhere.
+- **Bracket:** `beginReadings(component)` / `endReadings()` around a run of readings – the `beginTransmission`/`endTransmission` shape. Empty in every library except where a run has one-time setup (Apis: LiDAR power once for N readings).
+- **Missing values:** `-9999` stays on the file (NOAA and earth-science convention; ten years of NW files carry it), defined once as a named constant. Apis's `-9998` "not measured" stays until a replacement exists (nothing else distinguishes not-measured from error). Float accessors may return `NAN` in C++ with the printer mapping it to the constant, since `Print` would emit lowercase `nan`, which R does not read. Column count never changes on failure.
+
 ## 4. The one-reading primitive and its two consumers *(decided)*
 
-`writeReading(Print& out)` takes **one** reading and prints its values, each followed by a comma, to any Arduino `Print` (an SdFat `File`, `Serial`, or a `BufferPrint`); returns bytes written. No buffer, no offset, no maximum-bytes constant: SdFat batches into its own sector cache.
+`logReading(Print& out)` takes **one** reading and prints its values, each followed by a comma, to any Arduino `Print` (= `updateMeasurements()` + `printReading(out)`) (an SdFat `File`, `Serial`, or a `BufferPrint`); returns bytes written. No buffer, no offset, no maximum-bytes constant: SdFat batches into its own sector cache.
 
 Consumers:
 - **Fixed-width summary** – `getString()`: runs its own loop of N single readings, formats latest value and/or statistics. Unchanged output in first pass.
@@ -86,7 +94,7 @@ void collectReadings(S& s, uint16_t n, File& raw, uint8_t component = NW_READING
     s.beginReadings(component);
     for (uint16_t i = 0; i < n; i++) {
         raw.print(timestamp); raw.print(','); raw.print(S::NAME); raw.print(',');   // logger-side layout, decided later
-        s.writeReading(raw);
+        s.logReading(raw);
         raw.println();
     }
     s.endReadings();
@@ -130,7 +138,7 @@ Template, not base class: no vtable, no dependency on Core. Each reading reaches
 
 **Vocabulary (2026-09-20):** a *measurement* is a quantity the sensor reports (pressure, range); a *reading* is one acquisition of every measurement the sensor reports, at one moment (Andy, 2026-09-21: "reading"; "observation" also acceptable; "sample" rejected for its statistical double meaning – a reading is also a *set* of observations); *raw* is a reading before conversion (the chip's indication, e.g. ADC counts – exists only inside firmware `acquire()` or a controller-bus library's `updateMeasurements()`); the *register value* is the wire form (scaled integer per the appendix); the *value* is the float in the field. *Reading* is not used. *Read* is the verb for the bus (`readByte`, `readPage`); a *reading* is what one read of the instrument yields.
 
-**Decided 2026-09-21 (names):** the triad becomes `beginReadings(component)` / `writeReading(Print& out)` / `endReadings()` – "Raw" dropped, and the caller-owned buffer + offset replaced by an Arduino `Print` destination (SdFat `File` and `Serial` are both `Print`; `Print::print(float)` is allocation-free; SdFat batches into its own 512-byte sector cache – verified against AVR core 1.8.6 and the workspace SdFat). This removes `RAW_MAX_BYTES`, the straddle guard, and `appendValue`/`writeValue` entirely. `setNRangeReadings` → `setRangeReadings` (infix N dropped). `newData()` stays as a deprecated alias of `ready()` (reads the ready bit; behaviour unchanged); the counter-based freshness check is a new function `newReading()`. `requestReading()` on the library (the controller requests); `startReading` flag in firmware (the device starts). Logger-side template `collectReadings(sensor, n, component)`. For an in-memory destination, an 8-line `BufferPrint : public Print` adapter that owns its length and refuses overflow.
+**Decided 2026-09-21 (names):** the triad becomes `beginReadings(component)` / `printReading(Print& out)` [+ shortcut `logReading`] / `endReadings()` – "Raw" dropped, and the caller-owned buffer + offset replaced by an Arduino `Print` destination (SdFat `File` and `Serial` are both `Print`; `Print::print(float)` is allocation-free; SdFat batches into its own 512-byte sector cache – verified against AVR core 1.8.6 and the workspace SdFat). This removes `RAW_MAX_BYTES`, the straddle guard, and `appendValue`/`writeValue` entirely. `setNRangeReadings` → `setRangeReadings` (infix N dropped). `newData()` stays as a deprecated alias of `ready()` (reads the ready bit; behaviour unchanged); the counter-based freshness check is a new function `newReading()`. `requestReading()` on the library (the controller requests); `startReading` flag in firmware (the device starts). Logger-side template `collectReadings(sensor, n, component)`. For an in-memory destination, an 8-line `BufferPrint : public Print` adapter that owns its length and refuses overflow.
 
 **Held (Claude's proposals, not decided):** the `NW_` constants – `NW_READING_*` group selectors (Apis; written in a May Claude session) and the register-address / bit-mask constants (`NW_STATUS`, `NW_CTRL`, `NW_TRIGGER`, …): one prefix or three (`NW_REG_*` / `NW_BIT_*`), and per-library selectors (`APIS_ALL`, `APIS_RANGE`).
 
@@ -150,7 +158,7 @@ Provenance: *exists* = in the code today; *rename* = the operation exists under 
 | 2 | `updateMeasurements` | `bool updateMeasurements()` | exists (Apis, Haar, T9602); others gain it |
 | 3 | `begin` | `bool begin(uint8_t adr = ADR_DEFAULT)` | exists; return type → bool; Schema 1: checks schema byte 0x01 + name |
 | 3 | `getHeader` / `getString` / accessors | unchanged | exist |
-| 3 | `beginReadings` / `writeReading(Print&)` / `endReadings` | one reading per `writeReading` call | rename of `beginRawReadings/takeRawReading/endRawReadings` (Apis, NW_BME280); deprecated aliases |
+| 3 | `beginReadings` / `printReading(Print&)` / `endReadings`; shortcut `logReading(Print&)` | print the stored reading; `logReading` takes then prints | rename of `beginRawReadings/takeRawReading/endRawReadings` (Apis, NW_BME280); deprecated aliases |
 | 3 | `NW_READING_ALL` etc. | `uint8_t` | exists (Apis, May Claude session); prefix question held |
 | 3 | `<LIB>_<MEAS>_CAPACITY` | `#define`, default 1 | **new** |
 
