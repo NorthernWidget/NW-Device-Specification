@@ -395,7 +395,7 @@ This specification was designed with awareness of the following existing standar
 Block 0:  Schema=0x01, Name='A','p','i','s',0x00,0x00,0x00
 Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=[mfr], 0x00,0x00,0x00, Reserved
 Block 2:  Board type=0x4100 ('A'=0x41, rev 0), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
-Block 3:  Reserved, Magic=0x00, CRC=[computed], I2C address=0x41
+Block 3:  Reserved, Magic=0x4E, CRC=[computed], I2C address=0x41
 ```
 
 Legacy deployed units carry board type `0x6C00` and I²C address `0x50` (pre-Schema-1).
@@ -444,7 +444,7 @@ Block 1–3 (0x48–0x5F)   Reserved
 Block 0:  Schema=0x01, Name='H','a','a','r',0x00,0x00,0x00
 Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=[mfr], 0x00,0x00,0x00, Reserved
 Block 2:  Board type=0x4801 ('H'=0x48, rev 1), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
-Block 3:  Reserved, Magic=0x00, CRC=[computed], I2C address=0x48
+Block 3:  Reserved, Magic=0x4E, CRC=[computed], I2C address=0x48
 ```
 
 #### Page 1 (0x20–0x3F) — Sensor data
@@ -492,7 +492,7 @@ Unit rationale: 0.01 hPa is the natural meteorological unit and aligns with the 
 Block 0:  Schema=0x01, Name='W','a','l','r','u','s',0x00
 Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=[mfr], 0x00,0x00,0x00, Reserved
 Block 2:  Board type=0x5702 ('W'=0x57, rev 2), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
-Block 3:  Reserved, Magic=0x00, CRC=[computed], I2C address=0x57
+Block 3:  Reserved, Magic=0x4E, CRC=[computed], I2C address=0x57
 ```
 
 #### Page 1 (0x20–0x3F) — Sensor data
@@ -537,7 +537,7 @@ Unit rationale: µBar is the MS5803 library's internal `_pressure_actual` unit, 
 Block 0:  Schema=0x01, Name='L','i','b','e','l','l','e'  (exact 7-byte fit)
 Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=[mfr], 0x00,0x00,0x00, Reserved
 Block 2:  Board type=0x4C01 ('L'=0x4C, rev 1), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
-Block 3:  Reserved, Magic=0x00, CRC=[computed], I2C address=0x4C (UP) or 0x0C (DOWN)
+Block 3:  Reserved, Magic=0x4E, CRC=[computed], I2C address=0x4C (UP) or 0x0C (DOWN)
           [DOWN = 'L' (0x4C) XOR 0x40; see I²C address registry for secondary address scheme]
 ```
 
@@ -586,7 +586,7 @@ No Page 2. Calibration constants (Steinhart-Hart coefficients, UV cross-talk com
 Block 0:  Schema=0x01, Name='L','i','a','s','i','s',0x00
 Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=[mfr], 0x00,0x00,0x00, Reserved
 Block 2:  Board type=0x6C01 ('l'=0x6C, rev 1), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
-Block 3:  Reserved, Magic=0x00, CRC=[computed], I2C address=TBD
+Block 3:  Reserved, Magic=0x4E, CRC=[computed], I2C address=TBD
 ```
 
 Note: `0x6C00` is reserved — it was assigned to Apis before the ASCII-initial naming convention was established. Legacy deployed units carry board types `0x2400`/`0x2401` (formerly Dyson LW, Monarch LW).
@@ -607,7 +607,7 @@ Okapi is an I²C controller communicating with a Particle Boron telemetry board 
 Block 0:  Schema=0x01, Name='O','k','a','p','i',0x00,0x00
 Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=[mfr], 0x00,0x00,0x00, Reserved
 Block 2:  Board type=0x4F01 ('O'=0x4F, rev 1), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
-Block 3:  Reserved, Magic=0x00, CRC=[computed], Peripheral address=0x00 (unassigned)
+Block 3:  Reserved, Magic=0x4E, CRC=[computed], Peripheral address=0x00 (unassigned)
 ```
 
 Pre-production prototype units ("Resnik") carry board type `0x9950` and are not field-upgradeable to Schema 1.
@@ -656,7 +656,7 @@ Margay is an I²C controller, not a peripheral — it queries sensors on the bus
 Block 0:  Schema=0x01, Name='M','a','r','g','a','y',0x00
 Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=[mfr], 0x00,0x00,0x00, Reserved
 Block 2:  Board type=0x4D03 ('M'=0x4D, rev 3), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
-Block 3:  Reserved, Magic=0x00, CRC=[computed], I²C address=0x00 (unassigned)
+Block 3:  Reserved, Magic=0x4E, CRC=[computed], I²C address=0x00 (unassigned)
 ```
 
 Block 2 directly maps the existing 8-byte Schema 0 EEPROM serial number with no data loss. The board type encoding (`'M'` = 0x4D high byte, revision index low byte) already followed the Schema 1 convention before the spec was written.
