@@ -529,7 +529,7 @@ Block 2 (0x30–0x37)   MCP9808 — external temperature
 Block 3 (0x38–0x3F)   Reserved
 ```
 
-> **Migration note:** the firmware and library on `master` (June 2026, unreleased) serve this data from 0x22 with the earlier two-byte Block 0. They move to 0x28 with the universal Block 0 before the Walrus Schema 1 release.
+> **Migration note:** firmware and library on `master` moved this data from 0x22 to 0x28, and the update-period configuration from 0x00 to 0x26, on 2026-09-21 (unreleased). The remaining Block 0 fields (trigger, chip select, sleep, reading counter, fault byte) and Page 0 are Project-Walrus issues #15–#18.
 
 No Page 2. MS5803 calibration coefficients are read from its internal PROM at startup; MCP9808 is factory-calibrated.
 
