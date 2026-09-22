@@ -699,7 +699,7 @@ Block 2:  Board type=0x4D03 ('M'=0x4D, rev 3), Group ID=[mfr], Unique ID=[mfr], 
 Block 3:  Reserved, Magic=0x4E, CRC=[computed], I²C address=0x00 (unassigned)
 ```
 
-Block 2 directly maps the existing 8-byte Schema 0 EEPROM serial number with no data loss. The board type encoding (`'M'` = 0x4D high byte, revision index low byte) already followed the Schema 1 convention before the spec was written.
+Block 2 keeps the format of the existing 8-byte Schema 0 EEPROM serial number (board type, group ID, unique ID, FirmwareID) with no data loss, but not its location: Schema 0 wrote those 8 bytes at the very end of EEPROM, which under Schema 1 is Block 3 (reserved, magic, CRC, address), while Block 2 sits 8 bytes earlier at Page 0 offset 0x10–0x17. A logger library that reads its serial number from the last 8 bytes therefore reads Block 3 once the board is provisioned; it must read Page 0 (schema byte 0x01, magic, CRC) and take the serial number from Block 2, falling back to the old location when the schema byte is not 0x01. The board type encoding (`'M'` = 0x4D high byte, revision index low byte) already followed the Schema 1 convention before the spec was written.
 
 #### Page 1 (0x20–0x3F) — Logger status — HYPOTHETICAL
 
