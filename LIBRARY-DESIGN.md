@@ -16,6 +16,7 @@
 - `get<Field>()` accessors read fields, never the bus. Readings are kept in named per-measurement static arrays (`<LIB>_<FIELD>_CAPACITY`, default 1, no heap); `get<Field>Mean/Std/Sterr/Median()` are two-pass over them; `set<Field>Readings(n)` clamps to capacity; `get<Field>Count()` is the valid count.
 - `getHeader()` / `getString()` – one CSV row (String); width follows configuration. `printHeader(Print&)`, `printReading(Print&)` (stored reading, never acquires), `logReading(Print&)` (one reading, then print) – to an SdFat `File`, `Serial`, or a `BufferPrint`; no buffers, no offsets. `beginReadings(component)` / `endReadings()` bracket a run. **Required on every sensor library.**
 - `ready()`, `newReading()`; `faulted(chip)`, `anyFault()`, `faultChip()`, `faultKind()`, `printFault(Print&)`.
+- Bursts: the library writes the readings-requested word (0x24–0x25) before triggering N readings (`updateMeasurements()` with N > 1, or `beginReadings(component, n)`); the device holds its chips powered for exactly that many. One storage path: every acquisition appends to the measurement's static array; scalar getters read the last element; statistics read the array (decided 2026-09-22).
 - Missing value on file: `-9999` (one named constant); Apis keeps `-9998` "not measured" until replaced.
 - Names: Arduino style everywhere, libraries and firmware; camelCase; class-scoped enums for selectors (`Apis::RANGE`); register constants file-local; no `NW_` prefix except for what Core exports. Casing migration is two steps (camelCase with `[[deprecated]]` aliases, then removal) – but a name already removed is never re-added; consumers migrate forward.
 
@@ -154,8 +155,8 @@ Template, not base class: no vtable, no dependency on Core. Each reading reaches
         bit 7    sleep         device enters lowest power after this transaction; wakes on I²C address match
   0x22  COUNTER lo  uint16 little-endian; +1 when ready is set; 0 after power-up
   0x23  COUNTER hi
-  0x24  reserved    for counter extension only
-  0x25  reserved    for counter extension only
+  0x24  REQUESTED   uint16 little-endian, writable: readings the controller will trigger with the chips
+  0x25              held powered; 0 = one per trigger. Decided 2026-09-22 (#23); replaces the counter-extension reserve.
   0x26  CONFIG      device-specific, writable, volatile; 8 bits per appendix; 0x00 = defaults
                     (≤6 bits needed by any current device; more → device's own data area, never Block 0)
   0x27  FAULT       latched, read-only; cleared by any write to CONTROL
@@ -163,7 +164,7 @@ Template, not base class: no vtable, no dependency on Core. Each reading reaches
         4 out of range · 5 not initialised · 6 reset since last CONTROL write · 7 config rejected
         8 supply fault · 9–15 reserved universal · 16–31 device-specific
 ```
-Rules: only 0x21 and 0x26 accept writes (firmware checks the address in `receiveEvent()`); page rewrite + counter increment are atomic (interrupts off); ready clears when a reading starts (triggered or timed) and sets when registers are complete, counter increments then; FAULT is latched (status bits are live) and a CONTROL write acknowledges it; software reset dropped (rail power-cycle; Tally's counter reset is device-specific in CONFIG). Data in Blocks 1–3 (24 bytes); Libelle (28) and Margay-hypothetical (30) need a second data page. Each appendix gains a numbered chip table (fixes fault/select/fault-code index) and its CONFIG byte.
+Rules: only 0x21, 0x24–0x25 and 0x26 accept writes (firmware checks the address in `receiveEvent()`); page rewrite + counter increment are atomic (interrupts off); ready clears when a reading starts (triggered or timed) and sets when registers are complete, counter increments then; FAULT is latched (status bits are live) and a CONTROL write acknowledges it; software reset dropped (rail power-cycle; Tally's counter reset is device-specific in CONFIG). Data in Blocks 1–3 (24 bytes); Libelle (28) and Margay-hypothetical (30) need a second data page. Each appendix gains a numbered chip table (fixes fault/select/fault-code index) and its CONFIG byte.
 Library surface implied: `ready()`, `newReading()`, `requestReading(component)` (writes the mask), `faulted(chip)`, `faultChip()`, `faultKind()`, `printFault(Print&)`, `sleep()`, per-device config setters.
 
 **Original bookend proposal (superseded):**
@@ -267,7 +268,7 @@ Walrus and Haar should copy this shape; what is identical across the three becom
 ## 10. Deferred
 
 - **Sleep bit firmware implementation (TWI address-match wake).** The bit is defined in the spec (Page 1 control byte, bit 7) and stays. Implementing it in firmware depends on the ATtiny1634 TWI slave waking the part from power-down on address match; to be implemented and bench-tested later, not in Apis series 2 (Andy, 2026-09-21).
-- **How Apis runs** (free-running 100 ms cycle with LiDAR power-cycling): kept for now; Andy's priority to revisit as soon as the Block 0 decisions are closed.
+- **How Apis runs** – RESOLVED 2026-09-22 (Project-Apis #23, spec Apis appendix): on-demand only; LiDAR powered per the readings-requested word (0x24–0x25); readiness by polling the LiDAR's STATUS register (health flag after power-up, busy bit after a command) instead of fixed delays; the mode pin is out of the reading path; Serial only in debug builds. General rule for any chip: single reading = full power-up/init/acquire/power-down cycle; burst = power-up and init once under a requested count, acquire N times, power down when the count is done; the device keeps no idle timer; a burst that never completes is abandoned with a latched fault. Per-chip numbers belong in the appendix (Apis: power-up ≈ 22 ms boot after a ~15–20 ms rail ramp; init 4 writes; acquisition ≈ 1 ms at a good target; 65 mA idle / 85 mA acquiring).
 - **Series 3 `begin()` gates:** schema byte 0x01, name, and firmware patch ≥ `APIS_FW_MIN_PATCH`; plus `getHardwareVersion()` / `getFirmwareVersion()` so a sketch can report why `begin()` refused (Andy, 2026-09-21).
 
 - `NorthernWidget_Core` and the `NorthernWidget` bundle library: after Walrus + Haar (+ one more) are converted; contents = whatever is identical across them.
