@@ -72,7 +72,7 @@ Controllers (Margay, Okapi) are not sensors and do not implement the sensor regi
 ## Code conventions
 
 - `begin()` returns `bool`; checks I²C ACK; stubs return `false`
-- No build artifacts committed (no `_docs/`, no downloaded binaries)
+- No build artifacts committed (no generated `_site/` or Doxygen `xml/`, no downloaded binaries; `_docs/` is site *configuration* and is required)
 - DOI badge uses concept DOI (permanent, not per-version)
 
 ## Authors
