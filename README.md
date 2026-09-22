@@ -321,8 +321,12 @@ Address  Field         Access      Contents
                                                          address match, and clears the bit
   0x22   Reading       read-only   uint16, little-endian. Incremented by one when ready is set.
   0x23   counter                   0 after power-up. Wraps at 65535.
-  0x24   Reserved      —           Reserved for extending the reading counter to 24 or 32 bits.
-  0x25   Reserved      —           Nothing else may be assigned here.
+  0x24   Readings      writable    uint16, little-endian. How many readings the controller will
+  0x25   requested                 trigger with the device's chips held powered: the device powers
+                                   the selected chips up at the first trigger after this write and
+                                   down once the reading counter has advanced by this amount.
+                                   0 (the power-up value) = one reading per trigger, powered down
+                                   after each. A new write replaces the remainder.
   0x26   Config        writable    Device-specific configuration, 8 bits defined by the appendix.
                                    0x00 = the device's defaults. Volatile: the controller sets it
                                    after every power-up. A device needing more than 8 bits of
@@ -350,7 +354,8 @@ Address  Field         Access      Contents
 
 **Rules**
 
-- **Writable bytes.** Only 0x21 and 0x26 accept writes on Page 1. Firmware checks the register address in its receive handler and ignores writes elsewhere.
+- **Writable bytes.** Only 0x21, 0x24–0x25, and 0x26 accept writes on Page 1. Firmware checks the register address in its receive handler and ignores writes elsewhere.
+- **Readings requested (0x24–0x25).** The controller writes the number of readings it is about to trigger, then triggers them one by one through the normal handshake. The device pays its chips' power-up and initialisation once, at the first trigger, and powers them down when the counter has advanced by the requested amount; a single reading (0, or 1) is powered up and down around that one reading. The device keeps no idle timer: the count is the whole contract, so a controller that stops mid-burst cannot leave a chip powered beyond the device's own fault fallback (a burst that does not complete within a device-defined time is abandoned, the chips powered down, and a fault latched). The count and the reading counter both count unit readings and move at the same moment.
 - **Ready and the counter.** The device clears ready the moment a reading begins, whether triggered by the controller or started by the device's own timer, and sets it when the data registers are complete. The reading counter increments at that same moment, after the data is in place, so a controller that reads the counter and the data in one transaction never sees a new count with old data.
 - **Atomic rewrite.** The device rewrites the data registers and increments the counter with interrupts disabled, so a page read never straddles a rewrite.
 - **Trigger.** A trigger written while a reading is in progress stays set and is honoured when the current reading completes. A trigger written while ready is set starts a new reading and clears ready, so the controller never confuses the previous reading with the one it requested. A device may also start readings on its own schedule; the trigger adds one immediate reading without changing that schedule.
