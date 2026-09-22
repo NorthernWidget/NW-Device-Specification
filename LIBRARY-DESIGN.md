@@ -278,3 +278,44 @@ Walrus and Haar should copy this shape; what is identical across the three becom
 - Firmware-side shared code: same question, same timing.
 - Libelle ATtiny841 → ATtiny1634 migration (Project-Libelle #20); Liasis MCU (#2).
 - Header string format (§9 item 7).
+
+## 11. NW_Core: extraction plan *(prepared 2026-09-23; awaiting Andy's go)*
+
+**What Core is.** One library, `NW_Core` (repository, library name, and header `NW_Core.h`), holding what the spec and this design define for every NW library, extracted from Apis_Library as it stands after series 4, with Apis as the first consumer and its harness as the acceptance test (byte-identical output and bus transaction count). Two layers, one repository. Exports carry the `NW_` prefix (§7). Composition, not inheritance: a sensor class holds a device-layer member and calls it; no vtable, no base class.
+
+**The line, drawn from the Apis inventory (2026-09-23).**
+
+| Moves to Core: device layer, class `NW_Device` (spec-defined, identical for every Schema 1 device) | Apis lines |
+|---|---|
+| `begin(address, name, minPatch)`: ACK, read Page 0 0x00–0x0F, gates on schema 0x01, name, patch; `hardwareMajor()/hardwareMinor()/firmwareVersion()` | 33 |
+| bus primitives `readBytes`, `writeByte`, `writeRequest` (0x24–0x25) | 19 |
+| `setI2CAddress` (0x1F) | 3 |
+| handshake: `ready()`, `readCounter()`, `newReading()`, `requestReading(mask)`, `takeReading(mask)` with status/fault capture and the per-reading wait ceiling | 37 |
+| faults: `faulted(chip)`, `anyFault()`, `faultChip()`, `faultKind()`, `printFault(Print&, chipNames)` with the universal kind-name table | 20 |
+| register constants (`NW_REG_*`, `NW_BIT_*`), gaining the prefix as decided | – |
+| members: address, three version bytes, status, fault, last counter, timeout | – |
+
+| Moves to Core: common layer (design-defined) | Apis lines |
+|---|---|
+| `NW_Readings<T, CAPACITY>`: append (wrap at capacity), reset, count, last, mean/std/sterr (two-pass), median (copy + insertion sort) – replaces the per-measurement array + index + count triplets | ~50 |
+| sentinels `NW_ERROR` (−9999); `APIS_NOT_MEASURED` stays Apis-specific | – |
+| host-harness stubs `Arduino.h` / `Wire.h` under `extras/test/`, shared by every library's harness | – |
+
+| Stays in Apis | why |
+|---|---|
+| `Component` enum, sensitivity modes, `DEFAULT_ADDRESS`, capacities, `APIS_FW_MIN_PATCH` | device-specific |
+| `updateRange()`, `updateOrientation()`: data-page parsing and conversion | device data layout |
+| `updateMeasurements()`, `getString()`, `getHeader()`, `printHeader/printReading/logReading`, `beginReadings/endReadings` | device columns and names; they call Core |
+| deprecated raw-reading API and `NW_READING_*` aliases | Apis history |
+
+**Firmware side:** a separate library later (WireS/ATtiny), same idea, not part of this extraction.
+
+**Steps, one commit each, harness after every one.**
+0. Create `NW_Core`: LICENSE (GPL-3.0), library.properties, `src/NW_Core.h` (includes the two below), `src/NW_Device.h/.cpp`, `src/NW_Readings.h` (template, header-only), README, keywords, CITATION/.zenodo, docs.yml + .doxybook, `extras/test/` with the shared stubs and Core's own harness (device layer against the stub firmware; readings template against fixed inputs).
+1. `NW_Readings` written from Apis's array code; Apis adopts it for range, pitch, roll. Harness identical.
+2. `NW_Device` written from Apis's device-layer functions; Apis holds `NW_Device _dev` and forwards `begin`, versions, handshake, faults. Harness identical; transaction count identical.
+3. Sentinels and register constants move; `APIS_ERROR` becomes an alias of `NW_ERROR`.
+4. Apis `library.properties` gains `depends=NW_Core`; README; NW-Status gains an "on NW_Core" column.
+5. Walrus written on Core (its own series), then Haar. Anything that does not fit is a Core change, made once.
+
+**Decisions to confirm before step 0:** class names `NW_Device` and `NW_Readings`; `printFault` taking the device's chip-name table as an argument; the shared stubs living in Core (each library's harness then includes `../../../NW_Core/extras/test/` within the workspace, or a copy for a fresh clone); Library Manager registration of NW_Core before any consumer is released (a dependency the Library Manager cannot resolve blocks installation).
