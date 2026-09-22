@@ -416,6 +416,8 @@ Chip table (index used by status bits 1–6, control chip-select bits 1–6, and
 
 Block 0 (0x20–0x27) is the universal block. Config (0x26): bits 1:0 = LiDAR sensitivity (as the former register 0x25); bits 7:2 reserved. Firmware patch 1 clears the sleep bit without sleeping (implementation deferred) and free-runs every 100 ms in addition to answering triggers.
 
+**Run model (firmware patch 2, Project-Apis #23).** The unit is on-demand: it idles until a trigger; there is no free-running cycle. The LiDAR is powered through the board's 5 V switch and its enable pin only while readings are being taken, per the readings-requested word (0x24–0x25): powered up at the first trigger, powered down when the requested count is done. Power-up sequence: 5 V switch on, a short wait for the rail (680 µF through the MIC2544 at its ~227 mA limit), enable high, then poll the LiDAR for an I²C acknowledge and the health flag in its STATUS register (0x01 bit 5) rather than a fixed delay; on timeout the enable is toggled once more, and a second failure powers the LiDAR down, latches fault chip 0 kind 1 (no acknowledge) or 5 (not initialised), and completes the reading with range −9999. Each acquisition writes ACQ_COMMAND (0x00; any non-zero value starts a measurement on the v3HP) and polls STATUS bit 0 (busy) until clear before reading the distance registers; the LiDAR's mode pin is not used (on this board it is held high through a 1 kΩ resistor and cannot indicate busy). The accelerometer is read on every reading in which it is selected. Serial output exists only in debug builds.
+
 ```
 Block 1 (0x28–0x2F)   LiDAR Lite
   0x28–0x29   Range [cm], little-endian int16
