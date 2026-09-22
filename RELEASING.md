@@ -27,6 +27,7 @@ Every library must have:
 | `.github/workflows/docs.yml` | Thin wrapper: `permissions: contents: write` then a job with `uses: NorthernWidget/.github/.github/workflows/deploy-docs.yml@main` (the shared workflow pushes the site; without the explicit permission a repository whose default is read-only fails at startup) |
 | `_docs/` | Jekyll site config the shared docs workflow copies: `_config.yml` (title, description, `baseurl: /<Repo>/`, `url: https://docs.northernwidget.com`), `Gemfile`, `_data/navigation.yml` (Overview, the class, Classes, Files) — without it the workflow fails at the copy step |
 | `.doxybook/config.json` | `baseUrl: /<Repo>/`; the workflow runs doxybook2 with it |
+| GitHub Pages enabled | One-time repository setting, not a file: source = branch `gh-pages`, path `/`. The workflow pushes the built site to that branch; until Pages is enabled the site returns 404. `gh api -X POST repos/<owner>/<repo>/pages -f 'source[branch]=gh-pages' -f 'source[path]=/'` |
 
 ## Pre-release checklist
 
