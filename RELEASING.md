@@ -53,7 +53,7 @@ Do not begin until the spec is stable and a Schema 0 snapshot tag exists.
 
 11. **Schema 1 compliance** — implement the full Schema 1 register map per the device appendix in [NW-Device-Specification](https://github.com/NorthernWidget/NW-Device-Specification):
     - **Page 0 (0x00–0x1F, EEPROM-backed identity):** schema byte `0x01` at `0x00`; 7-byte name at `0x01–0x07`; HW/FW version at `0x08–0x0A`; serial number block at `0x10–0x17`; magic byte `0x4E` at `0x1D`; CRC-8/SMBUS at `0x1E`; I²C address at `0x1F`
-    - **Page 1 (0x20–0x3F, SRAM):** the universal Block 0 — status `0x20` (ready, per-chip fault bits, pan-fault), control `0x21` (trigger, chip select, sleep), reading counter `0x22–0x23`, device config `0x26`, latched fault `0x27` — then device data from `0x28` per the appendix (Page 3 continues data past 24 bytes)
+    - **Page 1 (0x20–0x3F, SRAM):** the universal Block 0 — status `0x20` (ready, per-chip fault bits, pan-fault), control `0x21` (trigger, chip select, sleep), reading counter `0x22–0x23`, readings requested `0x24–0x25` (writable count for bursts), device config `0x26`, latched fault `0x27` — then device data from `0x28` per the appendix (Page 3 continues data past 24 bytes)
     - **Page 2 (0x40–0x5F, calibration, if applicable):** per device appendix
     - Update default I²C address to the Schema 1 value from the address registry, and check the bus-occupancy table there for clashes with logger on-board chips
     - `begin()` reads Page 0 Blocks 0–1 and rejects: schema byte ≠ `0x01`; wrong name; firmware patch below the library's `<LIB>_FW_MIN_PATCH`; exposes `getHardwareMajor()`, `getHardwareMinor()`, `getFirmwareVersion()`
@@ -98,7 +98,7 @@ The firmware on a sensor's MCU is released with the hardware repo (`HWmajor.HWmi
 
 1. **Patch constant equals the tag** — the firmware's compiled patch (e.g. `FW_FW_PATCH`) must equal the `FWversion` digit of the tag; it is what the firmware writes to Page 0 byte `0x0A` and what the library checks. Bump it on any behavioural change visible to the library.
 2. **Names** — camelCase functions and globals, as for libraries; macros upper case.
-3. **Register map** — Page 0 served from the top of EEPROM (CRC checked, patch substituted); Page 1 universal Block 0 with the rules in the spec (only `0x21`/`0x26` writable; atomic rewrite; ready cleared at reading start, set with the counter increment; latched fault cleared by a control write); data from `0x28`; Page 2 for calibration.
+3. **Register map** — Page 0 served from the top of EEPROM (CRC checked, patch substituted); Page 1 universal Block 0 with the rules in the spec (only `0x21`, `0x24–0x25`, and `0x26` writable; atomic rewrite; ready cleared at reading start, set with the counter increment; latched fault cleared by a control write); data from `0x28`; Page 2 for calibration.
 4. **Provisioning** — Page 0 written with [NW-Provision](https://github.com/NorthernWidget/NW-Provision) and the unit recorded in [NW-Registry](https://github.com/NorthernWidget/NW-Registry); the ATTinyCore "EEPROM retained" fuse keeps it across reflashes.
 5. **Compile for the target** with `arduino-cli` before every commit; **bench test** the firmware + library pair on a provisioned board before the tag.
 6. **README** — the register map section describes the firmware on `master`, with the previous map kept for unreflashed boards.
