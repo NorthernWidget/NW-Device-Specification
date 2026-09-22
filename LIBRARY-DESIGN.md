@@ -207,7 +207,7 @@ Provenance: *exists* = in the code today; *rename* = the operation exists under 
 | 1 | `requestReading` | `bool requestReading()` | **new**; writes the trigger bit |
 | 1 | `newReading` | `bool newReading()` | **new**; true when the reading counter has advanced since the last stored reading |
 | 2 | `updateMeasurements` | `bool updateMeasurements()` | exists (Apis, Haar, T9602); others gain it |
-| 3 | `begin` | `bool begin(uint8_t adr = ADR_DEFAULT)` | exists; return type → bool; Schema 1: checks schema byte 0x01 + name |
+| 3 | `begin` | `bool begin(uint8_t adr = DEFAULT_ADDRESS)` | exists; return type → bool; Schema 1: checks schema byte 0x01 + name. Default address is a class-scoped constant (`Apis::DEFAULT_ADDRESS`, decided 2026-09-22); the `ADR_DEFAULT` macro is a deprecated alias until the next major version |
 | 3 | `getHeader` / `getString` / accessors | unchanged | exist |
 | 3 | `beginReadings` / `printReading(Print&)` / `endReadings`; shortcut `logReading(Print&)` | print the stored reading; `logReading` takes then prints | rename of `beginRawReadings/takeRawReading/endRawReadings` (Apis, NW_BME280); deprecated aliases |
 | 3 | `Apis::ALL` / `Apis::RANGE` / `Apis::ORIENT` (class-scoped enum) | group selectors | rename of `NW_READING_*` (Apis, May Claude session); deprecated aliases |
