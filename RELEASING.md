@@ -24,7 +24,7 @@ Every library must have:
 | `src/` | Source in `src/`, not flat layout |
 | `examples/LibraryName_Demo/` | Minimal sketch: `begin()` error check that prints `getFirmwareVersion()` on refusal; `getHeader()` in setup; `getString()` in loop with `delay(1000)` |
 | `extras/test/` | Host-side output-regression harness (stub `Arduino.h`/`Wire.h`, `run.sh`, recorded `baseline.txt`); see Apis_Library. Required once a library has been refactored to the common interface |
-| `.github/workflows/docs.yml` | Thin wrapper: `uses: NorthernWidget/.github/.github/workflows/deploy-docs.yml@main` |
+| `.github/workflows/docs.yml` | Thin wrapper: `permissions: contents: write` then a job with `uses: NorthernWidget/.github/.github/workflows/deploy-docs.yml@main` (the shared workflow pushes the site; without the explicit permission a repository whose default is read-only fails at startup) |
 | `_docs/` | Jekyll site config the shared docs workflow copies: `_config.yml` (title, description, `baseurl: /<Repo>/`, `url: https://docs.northernwidget.com`), `Gemfile`, `_data/navigation.yml` (Overview, the class, Classes, Files) — without it the workflow fails at the copy step |
 | `.doxybook/config.json` | `baseUrl: /<Repo>/`; the workflow runs doxybook2 with it |
 
