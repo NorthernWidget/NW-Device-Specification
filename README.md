@@ -484,6 +484,8 @@ Block 2 (0x30–0x37)   LPS35HW — pressure + temperature
 Block 3 (0x38–0x3F)   Reserved
 ```
 
+> **Migration note:** the firmware on `master` implements this map since 2026-09-23 (patch 1): Page 0 from EEPROM with CRC check, the writable-register rule with the address persisted, 32-byte page reads, and the Block 0 handshake (on-demand trigger only, chip select, reading counter, live status bits, latched fault byte: SHT31 no-acknowledge or checksum, LPS35HW no-acknowledge or timeout, unit reset at boot). Data moved from the legacy 0x02–0x0A raw counts to 0x28–0x35 in the units above, and the default address from 0x42 to 0x48. The readings-requested word and the sleep bit are accepted without effect. Unreleased and not yet validated on hardware.
+
 No Page 2. Both sensors are factory-calibrated; no user calibration step.
 
 > **I²C address note:** `0x48` (`'H'`) is also a common address for the ADS1115 ADC. There is no conflict among NW devices, but a system that independently uses an ADS1115 on the same bus must ensure the ADS1115 is configured to a different address (ADDR pin to GND = `0x48`, VDD = `0x49`, SDA = `0x4A`, SCL = `0x4B` — avoid `0x48`).
