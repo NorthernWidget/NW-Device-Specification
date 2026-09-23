@@ -3,19 +3,17 @@
 **Author:** Andy Wickert ([ORCID 0000-0002-9545-3365](https://orcid.org/0000-0002-9545-3365)), Northern Widget LLC
 **License:** [CC BY-SA 4.0](LICENSE)
 
-A transport-agnostic specification for embedded device identity, communication, and data exchange on shared buses. Designed for low-power environmental sensors and data loggers, but applicable to any device that can expose a byte-addressable address space.
-
-The specification defines how a device presents itself — what it is, what version it runs, what it measures — so that a host (logger, microcontroller, or any I²C controller) can discover and interact with it automatically, without prior knowledge of the specific device.
+This is a transport-agnostic specification for embedded device identity, communication, and data exchange on shared buses. Its target is low-power environmental sensors and data loggers, but any device that can expose a byte-addressable address space can implement it. The specification defines how a device presents itself – what it is, what version it runs, what it measures – and thereby lets a host (logger, microcontroller, or any I²C controller) discover it and interact with it automatically, without prior knowledge of the specific device.
 
 ---
 
 ## Background and history
 
-This specification grew out of a decade of practice building open-source environmental sensors and data loggers at [Northern Widget](https://northernwidget.com). Three generations of design are described here, each building on the last.
+This specification grew out of a decade of practice building open-source environmental sensors and data loggers at [Northern Widget](https://northernwidget.com). Three generations of design appear below. Each builds on the last.
 
 ### Schema 0 — Margay serial number block (c. 2015, deployed)
 
-The [Margay](https://github.com/NorthernWidget/Project-Margay) data logger was the first Northern Widget hardware to carry a structured identity block. At manufacture, a setup script writes an 8-byte serial number into the last 8 bytes of the ATmega1284p's EEPROM:
+The [Margay](https://github.com/NorthernWidget/Project-Margay) data logger was the first Northern Widget hardware to carry a structured identity block. A setup script writes that block at manufacture. It is an 8-byte serial number in the last 8 bytes of the ATmega1284p's EEPROM:
 
 ```
 Offset  Field       Size  Notes
@@ -27,10 +25,10 @@ Offset  Field       Size  Notes
   6     FirmwareID  2 B   Always written as 0x0000; reserved
 ```
 
-This block is read by a programmer or setup jig — not exposed over I2C. It is a manufacturing-time convention, not a bus-communication protocol. Its significance here is twofold:
+A programmer or setup jig reads this block – it is not exposed over I2C. It is a manufacturing-time convention, not a bus-communication protocol. Its significance here is twofold:
 
 1. It established the serial number vocabulary (board type / group / unique ID) that Schema 1 inherits.
-2. The `FirmwareID` field, always `0x0000`, means every Margay ever programmed already carries `Schema = 0x00` in that slot — an accidental deployment of schema numbering before the concept was formalized.
+2. The `FirmwareID` field, always `0x0000`, means that every Margay ever programmed already carries `Schema = 0x00` in that slot – an accidental deployment of schema numbering before the concept was formalized.
 
 Schema 0 is a Margay-only artifact. Sensors produced before Schema 1 typically have blank EEPROM (`0xFF`) and no structured identity block.
 
@@ -38,7 +36,7 @@ Schema 0 is a Margay-only artifact. Sensors produced before Schema 1 typically h
 
 ### Schema 1 prototype — Apis I2C register map (c. 2019, deployed)
 
-The [Apis](https://github.com/NorthernWidget/Project-Apis) LiDAR rangefinder board was the first Northern Widget sensor to expose a structured I2C register map. The ATtiny1634 firmware populates a 32-byte array (`Reg[32]`) in SRAM and serves it over I2C via the WireS library. The 32-byte size was chosen to fit within the Arduino Wire library's default transaction buffer.
+The [Apis](https://github.com/NorthernWidget/Project-Apis) LiDAR rangefinder board was the first Northern Widget sensor to expose a structured I2C register map. The ATtiny1634 firmware populates a 32-byte array (`Reg[32]`) in SRAM and serves it over I2C via the WireS library. The 32-byte size is deliberate: it fits within the Arduino Wire library's default transaction buffer.
 
 The register map as currently deployed:
 
@@ -78,7 +76,7 @@ Address  Field             Type    Notes
   0x1F   Reserved
 ```
 
-This prototype introduced the key concepts that Schema 1 formalises: a fixed device name at known addresses, hardware and firmware version bytes, a ready flag, and a writable I2C address register. Its limitations — status at 0x00 leaving no room for a schema byte, identity and sensor data mixed in a single page, no serial number, no integrity check — motivated the design below.
+This prototype introduced the key concepts that Schema 1 formalises: a fixed device name at known addresses, hardware and firmware version bytes, a ready flag, and a writable I2C address register. Its limitations motivated the design below. Status at 0x00 left no room for a schema byte, identity and sensor data shared a single page, and the map carried no serial number and no integrity check.
 
 ---
 
@@ -91,16 +89,16 @@ The full specification, described in detail in the sections that follow.
 ## Design principles
 
 - **Transport-agnostic.** The specification defines a virtual byte-addressable address space. I2C, RS-485, SPI, or any byte-serial transport may carry it.
-- **Fixed 32-byte pages.** Pages are the atomic read unit. 32 bytes is the lowest-common-denominator single-transaction read on stock Arduino hardware (Wire buffer limit). Fixed page size means fixed offsets, no parser, no seek — a corrupt byte damages only its own field.
-- **Auto-discovery.** A controller scans addresses, reads 8 bytes (Block 0 of Page 0), and immediately knows whether a device is NW-schema-compliant and what it is. No prior knowledge required.
-- **Layered.** A controller that only needs identity reads Page 0. A controller that needs measurements reads Page 1. Future schemas add pages; old controllers ignore pages they don't know.
-- **No central registrar.** Device identity is established by a 7-byte ASCII name at a fixed address. A central manufacturer ID registry is not required.
+- **Fixed 32-byte pages.** Pages are the atomic read unit. 32 bytes is the lowest-common-denominator single-transaction read on stock Arduino hardware (Wire buffer limit). Fixed page size means fixed offsets, no parser, and no seek: a corrupt byte damages only its own field.
+- **Auto-discovery.** Your controller scans addresses, reads 8 bytes (Block 0 of Page 0), and immediately knows whether a device is NW-schema-compliant and what it is. It needs no prior knowledge.
+- **Layered.** A controller that only needs identity reads Page 0. A controller that needs measurements reads Page 1. Future schemas add pages, and old controllers ignore pages they don't know.
+- **No central registrar.** A 7-byte ASCII name at a fixed address establishes device identity. You need no central manufacturer ID registry.
 
 ---
 
 ## Address space
 
-The device exposes a flat, byte-addressable virtual address space. The controller writes a starting address, then reads N bytes (maximum 32 per transaction). The device increments the address pointer with each byte returned.
+Your device exposes a flat, byte-addressable virtual address space. The controller writes a starting address, then reads N bytes (maximum 32 per transaction). The device increments the address pointer with each byte returned.
 
 Pages are 32-byte aligned:
 
@@ -120,7 +118,7 @@ The schema byte (Page 0, address 0x00) declares which pages a device exposes.
 
 ### Page 0
 
-Page 0 is stored at the **top of EEPROM**: `EEPROM[length−32]` through `EEPROM[length−1]`. This placement protects identity data from accidental overwrite by any code that writes EEPROM sequentially from address 0 — a common pattern in both user sketches (on logger devices) and firmware bugs (on any device).
+Store Page 0 at the **top of EEPROM**: `EEPROM[length−32]` through `EEPROM[length−1]`. This placement protects identity data from accidental overwrite by any code that writes EEPROM sequentially from address 0. That pattern is common in both user sketches (on logger devices) and firmware bugs (on any device).
 
 The byte index within Page 0 maps directly to the I²C register offset:
 
@@ -136,11 +134,11 @@ EEPROM.read(PAGE0_BASE + 0x1E)  // CRC-8
 EEPROM.read(PAGE0_BASE + 0x1F)  // I²C address
 ```
 
-Page 0 is written once at manufacture by a dedicated programmer sketch. Production firmware never writes to `EEPROM[length−32]` or above. The CRC-8 at offset 0x1E provides integrity verification on every boot.
+A dedicated programmer sketch writes Page 0 once, at manufacture. Your production firmware never writes to `EEPROM[length−32]` or above. The CRC-8 at offset 0x1E provides an integrity check on every boot.
 
 ### Page 2
 
-Page 2 is stored immediately below Page 0: `EEPROM[length−64]` through `EEPROM[length−33]`. This placement applies the same protection rationale as Page 0 — persistent data at the top of EEPROM is safe from sequential writes that start at address 0.
+Store Page 2 immediately below Page 0: `EEPROM[length−64]` through `EEPROM[length−33]`. The same protection rationale applies as for Page 0. Persistent data at the top of EEPROM is safe from sequential writes that start at address 0.
 
 ```cpp
 #define PAGE2_BASE  (EEPROM.length() - 64)
@@ -149,15 +147,13 @@ Page 2 is stored immediately below Page 0: `EEPROM[length−64]` through `EEPROM
 EEPROM.read(PAGE2_BASE + (i - 0x40))
 ```
 
-Page 2 contents are device-specific and defined in each device's appendix. Devices with no calibration data have all 32 bytes reserved (`0xFF` unprogrammed or `0x00` by convention).
-
-Device-specific EEPROM usage (outside Pages 0 and 2) must stay **below** `EEPROM[length−64]`.
+Page 2 contents are device-specific: each device's appendix defines them. Devices with no calibration data have all 32 bytes reserved (`0xFF` unprogrammed or `0x00` by convention). Keep all other device-specific EEPROM usage (outside Pages 0 and 2) **below** `EEPROM[length−64]`.
 
 ---
 
 ## Device provisioning reference
 
-The table below lists the MCU, EEPROM size, and avrdude part identifier for each NW device. EEPROM size determines where Page 0 is written (`EEPROM[length−32]`). The avrdude part is used by [NW-Provision](https://github.com/NorthernWidget/NW-Provision) and also serves as a hardware safety check: avrdude verifies the chip's signature bytes against the specified part and refuses to program a mismatch.
+The table below lists the MCU, EEPROM size, and avrdude part identifier for each NW device. EEPROM size determines where Page 0 lives (`EEPROM[length−32]`). [NW-Provision](https://github.com/NorthernWidget/NW-Provision) uses the avrdude part, which also serves as a hardware safety check: avrdude verifies the chip's signature bytes against the specified part and refuses to program a mismatch.
 
 | Device  | MCU          | EEPROM | Page 0 offset | avrdude part |
 |---------|-------------|--------|--------------|-------------|
@@ -173,19 +169,19 @@ The table below lists the MCU, EEPROM size, and avrdude part identifier for each
 
 ## Transport
 
-This specification is transport-agnostic. The 32-byte page layout is a data structure; the physical layer is separate.
+This specification is transport-agnostic. The 32-byte page layout is a data structure. The physical layer is separate.
 
 ### I²C (primary transport)
 
-The controller performs a register-addressed read: write the starting address (e.g., `0x00` for Page 0, `0x20` for Page 1), then clock out up to 32 bytes. The device increments its address pointer with each byte returned. This is the standard NW sensor peripheral interface.
+Your controller performs a register-addressed read: write the starting address (e.g., `0x00` for Page 0, `0x20` for Page 1), then clock out up to 32 bytes. The device increments its address pointer with each byte returned. This is the standard NW sensor peripheral interface.
 
 ### UART
 
-UART has no inherent framing — a bare address byte will be misinterpreted if the line carries other traffic. A framing layer is required. Two options are supported:
+UART has no inherent framing: a bare address byte will be misinterpreted if the line carries other traffic. You therefore need a framing layer. Two options are supported:
 
-**COBS (Consistent Overhead Byte Stuffing)** — a formal standard that encodes data so `0x00` never appears in the payload, making `0x00` an unambiguous frame boundary. Arduino libraries are available. Recommended when interoperability or formal correctness matters.
+**COBS (Consistent Overhead Byte Stuffing)** – a formal standard that encodes data such that `0x00` never appears in the payload, which makes `0x00` an unambiguous frame boundary. Arduino libraries are available. It is recommended when interoperability or formal correctness matters.
 
-**Magic Preamble** — a two-byte sync sequence (`0xAA 0x55`) that cannot appear in normal ASCII traffic, followed by a page-address byte. Simple to implement by hand.
+**Magic Preamble** – a two-byte sync sequence (`0xAA 0x55`) that cannot appear in normal ASCII traffic, followed by a page-address byte. It is simple to implement by hand.
 
 Magic Preamble frame format:
 
@@ -194,13 +190,13 @@ Request  (controller → device):  [0xAA][0x55][page_addr]           3 bytes
 Response (device → controller):  [0xAA][0x55][page_addr][32 bytes][CRC-8]  36 bytes
 ```
 
-The preamble in the response allows the controller to re-synchronise if it misses the start. Both COBS and Magic Preamble framing are acceptable NW UART conventions; the choice is per-device and should be documented in the device's own specification.
+The preamble in the response lets the controller re-synchronise if it misses the start. Both COBS and Magic Preamble framing are acceptable NW UART conventions. The choice is per-device, and you should document it in the device's own specification.
 
 ---
 
 ## Page 0 — Identity
 
-32 bytes, persistent. Written at manufacture; rarely changed. Organised as four 8-byte blocks.
+32 bytes, persistent. Written at manufacture and rarely changed. Organised as four 8-byte blocks.
 
 ### Block 0 (0x00–0x07) — Core identity
 
@@ -213,7 +209,7 @@ Address  Field   Size  Contents
   –0x07
 ```
 
-The schema byte at 0x00 is the first thing a controller reads. A controller's decision tree:
+The schema byte at 0x00 is the first thing your controller reads. Its decision tree:
 
 | Value | Meaning | Action |
 |-------|---------|--------|
@@ -222,13 +218,9 @@ The schema byte at 0x00 is the first thing a controller reads. A controller's de
 | `0xFF` | Unprogrammed EEPROM | Not auto-detectable; skip |
 | `0x02`–`0xFE` | Future or unknown schema | Skip, or parse if the controller knows that version |
 
-**`0x00` and `0xFF` are permanently reserved and will never be assigned to a valid schema.** `0x00` is the erased-then-overwritten default of the Margay serial number block (Schema 0); `0xFF` is the hardware default of blank EEPROM. Both are unambiguously "not auto-detectable" — a controller need not distinguish between them.
+**`0x00` and `0xFF` are permanently reserved and will never be assigned to a valid schema.** `0x00` is the erased-then-overwritten default of the Margay serial number block (Schema 0), and `0xFF` is the hardware default of blank EEPROM. Both are unambiguously "not auto-detectable" – your controller need not distinguish between them. Valid schemas therefore occupy `0x01`–`0xFE`: 254 values, sufficient for any conceivable rate of fundamental protocol change.
 
-Valid schemas therefore occupy `0x01`–`0xFE`: 254 values, sufficient for any conceivable rate of fundamental protocol change.
-
-The 7-byte name field accommodates all current Northern Widget device names without truncation. A fixed-position name at a fixed address gives negligible collision probability with non-compliant devices; no manufacturer prefix is required.
-
-Reserved bytes are written as `0x00` at manufacture. `0xFF` indicates unprogrammed EEPROM.
+The 7-byte name field accommodates all current Northern Widget device names without truncation. A fixed-position name at a fixed address gives negligible collision probability with non-compliant devices, and no manufacturer prefix is required. Write reserved bytes as `0x00` at manufacture. `0xFF` indicates unprogrammed EEPROM.
 
 ### Block 1 (0x08–0x0F) — Version
 
@@ -245,7 +237,7 @@ Address  Field     Size  Contents
   0x0F   Reserved  1 B   0x00
 ```
 
-**Combined-repo convention (Northern Widget):** Hardware and firmware share a single repository and a single version tag (M.m.F, where M.m = hardware version and F = firmware patch). In this case, write the firmware patch to 0x0A and leave 0x0B–0x0D as 0x00.
+**Combined-repo convention (Northern Widget):** Hardware and firmware share a single repository and a single version tag (M.m.F, where M.m = hardware version and F = firmware patch). Write the firmware patch to 0x0A. Leave 0x0B–0x0D as 0x00.
 
 **Separate-repo convention:** Write full SemVer for hardware (0x08–0x0A) and firmware (0x0B–0x0D) independently.
 
@@ -260,9 +252,7 @@ Address  Field        Size  Contents
   0x16   FirmwareID   2 B   Legacy field; write as 0x0000. Reserved for future use.
 ```
 
-The serial number block follows the convention established by the Margay data logger (Schema 0). Preserving this layout maintains consistency with existing NW manufacturing records.
-
-Group ID and unique ID assignment are the responsibility of the device manufacturer. No central registry is required; uniqueness within a deployment is the practical requirement.
+The serial number block follows the convention that the Margay data logger established (Schema 0). Preserving this layout keeps it consistent with existing NW manufacturing records. Group ID and unique ID assignment are the device manufacturer's responsibility: no central registry is required, and uniqueness within a deployment is the practical requirement.
 
 ### Block 3 (0x18–0x1F) — Integrity and administration
 
@@ -301,9 +291,9 @@ uint8_t crc8_smbus(const uint8_t *data, uint8_t len) {
 
 ## Page 1 — Sensor data
 
-32 bytes, SRAM-backed, rewritten by the device on every reading. Block 0 is universal — identical in meaning on every NW device — and Blocks 1–3 (0x28–0x3F, 24 bytes) carry the device's data, defined per device type in its appendix. A device with more than 24 bytes of data continues on Page 3 (see [Address space](#address-space)).
+32 bytes, SRAM-backed, rewritten by the device on every reading. Block 0 is universal – identical in meaning on every NW device – and Blocks 1–3 (0x28–0x3F, 24 bytes) carry the device's data, defined per device type in its appendix. A device with more than 24 bytes of data continues on Page 3 (see [Address space](#address-space)).
 
-A *reading* is one acquisition of every measurement the device reports, at one moment. A *chip* is one sensing IC on the board; each appendix numbers its chips in a fixed order, and that index is used by the status, control, and fault bytes below.
+A *reading* is one acquisition of every measurement the device reports, at one moment. A *chip* is one sensing IC on the board. Each appendix numbers its chips in a fixed order, and the status, control, and fault bytes below use that index.
 
 ### Block 0 (0x20–0x27) — Status and control
 
@@ -354,40 +344,40 @@ Address  Field         Access      Contents
 
 **Rules**
 
-- **Writable bytes.** Only 0x21, 0x24–0x25, and 0x26 accept writes on Page 1. Firmware checks the register address in its receive handler and ignores writes elsewhere.
-- **Readings requested (0x24–0x25).** The controller writes the number of readings it is about to trigger, then triggers them one by one through the normal handshake. The device pays its chips' power-up and initialisation once, at the first trigger, and powers them down when the counter has advanced by the requested amount; a single reading (0, or 1) is powered up and down around that one reading. The device keeps no idle timer: the count is the whole contract, so a controller that stops mid-batch cannot leave a chip powered beyond the device's own fault fallback (a batch that does not complete within a device-defined time is abandoned, the chips powered down, and a fault latched). The count and the reading counter both count unit readings and move at the same moment. A single reading is a batch of one, and is the default. A chip selected at any trigger of a batch stays powered until the batch ends; the selection may change from trigger to trigger, and unselected chips keep their previous data.
-- **Ready and the counter.** The device clears ready the moment a reading begins, whether triggered by the controller or started by the device's own timer, and sets it when the data registers are complete. The reading counter increments at that same moment, after the data is in place, so a controller that reads the counter and the data in one transaction never sees a new count with old data.
-- **Atomic rewrite.** The device rewrites the data registers and increments the counter with interrupts disabled, so a page read never straddles a rewrite.
-- **Trigger.** A trigger written while a reading is in progress stays set and is honoured when the current reading completes. A trigger written while ready is set starts a new reading and clears ready, so the controller never confuses the previous reading with the one it requested. A device may also start readings on its own schedule; the trigger adds one immediate reading without changing that schedule.
-- **Chip count.** Block 0 addresses up to six chip groups: six select bits, six fault bits, and a three-bit chip field with 7 meaning the unit. Chips always read together share an index. A device with more than six independently selectable groups defines a second select byte and a second fault byte in its own data area, described in its appendix; Block 0 covers the first six and never changes.
-- **Live versus latched.** Status bits 1–6 show which chips are faulted *now* and clear when the chip next succeeds. The fault byte at 0x27 holds the most recent fault until the controller acknowledges it, so a fault that cleared itself between readings remains visible. Any write to Control acknowledges: it clears 0x27 to 0x00. A controller that triggers readings therefore acknowledges on every request; one that only reads a free-running device acknowledges whenever it sets chip select or sleep.
-- **Sleep.** After a transaction that sets bit 7, the device completes the transaction, then enters its lowest-power state. The ATtiny TWI slave wakes on address match, so no timer is needed; the first transaction after waking may see a delayed acknowledge.
+- **Writable bytes.** Only 0x21, 0x24–0x25, and 0x26 accept writes on Page 1. Your firmware checks the register address in its receive handler and ignores writes elsewhere.
+- **Readings requested (0x24–0x25).** Your controller writes the number of readings it is about to trigger, then triggers them one by one through the normal handshake. The device pays its chips' power-up and initialisation once, at the first trigger, and powers them down when the counter has advanced by the requested amount, and a single reading (0, or 1) is powered up and down around that one reading. The device keeps no idle timer: the count is the whole contract, and a controller that stops mid-batch therefore cannot leave a chip powered beyond the device's own fault fallback (a batch that does not complete within a device-defined time is abandoned, the chips powered down, and a fault latched). The count and the reading counter both count unit readings and move at the same moment. A single reading is a batch of one, and is the default. A chip selected at any trigger of a batch stays powered until the batch ends, the selection may change from trigger to trigger, and unselected chips keep their previous data.
+- **Ready and the counter.** The device clears ready the moment a reading begins, whether the controller triggered it or the device's own timer started it, and sets it when the data registers are complete. The reading counter increments at that same moment, after the data is in place, and your controller can therefore read the counter and the data in one transaction and never see a new count with old data.
+- **Atomic rewrite.** The device rewrites the data registers and increments the counter with interrupts disabled, and a page read therefore never straddles a rewrite.
+- **Trigger.** A trigger written while a reading is in progress stays set, and the device honours it when the current reading completes. A trigger written while ready is set starts a new reading and clears ready: the controller never confuses the previous reading with the one it requested. A device may also start readings on its own schedule, and the trigger then adds one immediate reading without changing that schedule.
+- **Chip count.** Block 0 addresses up to six chip groups: six select bits, six fault bits, and a three-bit chip field with 7 meaning the unit. Chips that are always read together share an index. If your device has more than six independently selectable groups, define a second select byte and a second fault byte in its own data area and describe them in its appendix. Block 0 covers the first six and never changes.
+- **Live versus latched.** Status bits 1–6 show which chips are faulted *now* and clear when the chip next succeeds. The fault byte at 0x27 holds the most recent fault until the controller acknowledges it, which keeps a fault that cleared itself between readings visible. Any write to Control acknowledges: it clears 0x27 to 0x00. If your controller triggers readings, it therefore acknowledges on every request. If it only reads a free-running device, it acknowledges whenever it sets chip select or sleep.
+- **Sleep.** After a transaction that sets bit 7, the device completes the transaction, then enters its lowest-power state. The ATtiny TWI slave wakes on address match, and no timer is needed, but the first transaction after waking may see a delayed acknowledge.
 - **Power-up state.** Status 0x00 (not ready), Control with every present chip selected, counter 0, Config 0x00, Fault 0x00 unless initialisation itself failed.
 
-A controller reads all 32 bytes of Page 1 in one transaction, checks ready first, then the pan-fault bit, and only then uses the data. Bit 7 gives a fault summary without the controller knowing the device's chip assignments; 0x27 gives the detail when it wants it.
+Your controller reads all 32 bytes of Page 1 in one transaction, checks ready first, then the pan-fault bit, and only then uses the data. Bit 7 gives a fault summary without your controller knowing the device's chip assignments. 0x27 gives the detail when it wants it.
 
 ### Blocks 1–3 (0x28–0x3F) — Device data
 
-Defined per device in the appendices. Values are little-endian, in the types and scaled units the appendix states. Each appendix also provides a numbered **chip table**, which fixes the index used by the status fault bits, the control chip-select bits, and the fault byte.
+The appendices define these per device. Values are little-endian, in the types and scaled units the appendix states. Each appendix also provides a numbered **chip table**, which fixes the index used by the status fault bits, the control chip-select bits, and the fault byte.
 
 ---
 
 ## Page 2 — Calibration
 
-32 bytes, persistent (EEPROM-backed). Written at calibration time; read by a controller that wishes to verify or update calibration state. Device-specific; defined per device type.
+32 bytes, persistent (EEPROM-backed). Written at calibration time, and read by your controller when it wishes to verify or update calibration state. Device-specific and defined per device type.
 
 ---
 
 ## Prior art
 
-This specification was designed with awareness of the following existing standards:
+The design took the following existing standards into account:
 
-- **IEEE 1451 / TEDS** — the closest philosophical precedent: smart-transducer self-identification, an EEPROM-resident identity block, and media independence. This specification differs in being open and unencumbered (IEEE 1451 is paywalled), using a flat byte map rather than bit-packed templates, and co-locating runtime data with identity rather than separating them entirely.
-- **I2C Device ID** (reserved address 0xF8) — the closest base-I2C primitive: a 3-byte identifier (12-bit manufacturer / 9-bit part / 3-bit revision). This specification extends that concept to a full identity page.
-- **SMBus ARP and UDID** — bus-native device discovery and dynamic address assignment, analogous to the writable address register at 0x1F. Widely considered heavyweight; this specification offers a lighter scan-and-read alternative.
-- **IPMI FRU** — structural reference for area-based versioning and extensibility. This specification borrows the extensibility philosophy (schema versioning allows old controllers to skip unknown pages) but rejects FRU's variable-length offset-chained block structure in favour of fixed-position fields.
-- **JEDEC SPD** — fixed-byte-map-in-EEPROM-over-SMBus, the closest historical precedent for Page 0.
-- **Adafruit STEMMA QT / SparkFun Qwiic** — these ecosystems standardised I2C connectors and voltage levels but not device identity or discovery. Devices in these ecosystems are identified by fixed I2C address, chip-specific WHO_AM_I registers, and human-maintained conflict lists. This specification provides the missing auto-discovery layer.
+- **IEEE 1451 / TEDS** – the closest philosophical precedent: smart-transducer self-identification, an EEPROM-resident identity block, and media independence. This specification differs in three ways: it is open and unencumbered (IEEE 1451 is paywalled), it uses a flat byte map rather than bit-packed templates, and it co-locates runtime data with identity rather than separating them entirely.
+- **I2C Device ID** (reserved address 0xF8) – the closest base-I2C primitive: a 3-byte identifier (12-bit manufacturer / 9-bit part / 3-bit revision). This specification extends that concept to a full identity page.
+- **SMBus ARP and UDID** – bus-native device discovery and dynamic address assignment, analogous to the writable address register at 0x1F. They are widely considered heavyweight, and this specification offers a lighter scan-and-read alternative.
+- **IPMI FRU** – structural reference for area-based versioning and extensibility. This specification borrows the extensibility philosophy (schema versioning allows old controllers to skip unknown pages) but rejects FRU's variable-length offset-chained block structure in favour of fixed-position fields.
+- **JEDEC SPD** – fixed-byte-map-in-EEPROM-over-SMBus, the closest historical precedent for Page 0.
+- **Adafruit STEMMA QT / SparkFun Qwiic** – these ecosystems standardised I2C connectors and voltage levels but not device identity or discovery. Devices in these ecosystems rely on fixed I2C address, chip-specific WHO_AM_I registers, and human-maintained conflict lists for identification. This specification provides the missing auto-discovery layer.
 
 ---
 
@@ -415,9 +405,9 @@ Chip table (index used by status bits 1–6, control chip-select bits 1–6, and
 | 0 | LiDAR Lite v3HP | range, signal strength |
 | 1 | LIS3DH accelerometer | X, Y, Z |
 
-Block 0 (0x20–0x27) is the universal block. Config (0x26): bits 1:0 = LiDAR sensitivity (as the former register 0x25); bits 7:2 reserved. Firmware patch 1 clears the sleep bit without sleeping (implementation deferred) and free-runs every 100 ms in addition to answering triggers.
+Block 0 (0x20–0x27) is the universal block. Config (0x26): bits 1:0 = LiDAR sensitivity (as the former register 0x25), bits 7:2 reserved. Firmware patch 1 clears the sleep bit without sleeping (implementation deferred) and free-runs every 100 ms in addition to answering triggers.
 
-**Run model (firmware patch 2, Project-Apis #23).** The unit is on-demand: it idles until a trigger; there is no free-running cycle. The LiDAR is powered through the board's 5 V switch and its enable pin only while readings are being taken, per the readings-requested word (0x24–0x25): powered up at the first trigger, powered down when the requested count is done. Power-up sequence: 5 V switch on, a short wait for the rail (680 µF through the MIC2544 at its ~227 mA limit), enable high, then poll the LiDAR for an I²C acknowledge and the health flag in its STATUS register (0x01 bit 5) rather than a fixed delay; on timeout the enable is toggled once more, and a second failure powers the LiDAR down, latches fault chip 0 kind 1 (no acknowledge) or 5 (not initialised), and completes the reading with range −9999. Each acquisition writes ACQ_COMMAND (0x00; any non-zero value starts a measurement on the v3HP) and polls STATUS bit 0 (busy) until clear before reading the distance registers; the LiDAR's mode pin is not used (on this board it is held high through a 1 kΩ resistor and cannot indicate busy). The accelerometer is read on every reading in which it is selected. Serial output exists only in debug builds.
+**Run model (firmware patch 2, Project-Apis #23).** The unit is on-demand: it idles until a trigger, and there is no free-running cycle. The firmware powers the LiDAR through the board's 5 V switch and its enable pin only while readings are being taken, per the readings-requested word (0x24–0x25): powered up at the first trigger, powered down when the requested count is done. Power-up sequence: (1) 5 V switch on, (2) a short wait for the rail (680 µF through the MIC2544 at its ~227 mA limit), (3) enable high, and (4) a poll of the LiDAR for an I²C acknowledge and the health flag in its STATUS register (0x01 bit 5) rather than a fixed delay. On timeout the firmware toggles the enable once more, and a second failure powers the LiDAR down, latches fault chip 0 kind 1 (no acknowledge) or 5 (not initialised), and completes the reading with range −9999. Each acquisition writes ACQ_COMMAND (0x00, where any non-zero value starts a measurement on the v3HP) and polls STATUS bit 0 (busy) until clear before reading the distance registers. The LiDAR's mode pin is not used (on this board it is held high through a 1 kΩ resistor and cannot indicate busy). The firmware reads the accelerometer on every reading in which it is selected. Serial output exists only in debug builds.
 
 ```
 Block 1 (0x28–0x2F)   LiDAR Lite
@@ -468,7 +458,7 @@ Chip table:
 | 0 | SHT31 | temperature, relative humidity |
 | 1 | LPS35HW | pressure, temperature |
 
-Block 0 (0x20–0x27) is the universal block. Config (0x26): no bits defined; write 0x00.
+Block 0 (0x20–0x27) is the universal block. Config (0x26): no bits defined. Write 0x00.
 
 ```
 Block 1 (0x28–0x2F)   SHT31 — temperature + humidity
@@ -484,11 +474,11 @@ Block 2 (0x30–0x37)   LPS35HW — pressure + temperature
 Block 3 (0x38–0x3F)   Reserved
 ```
 
-> **Migration note:** the firmware on `master` implements this map since 2026-09-23 (patch 1): Page 0 from EEPROM with CRC check, the writable-register rule with the address persisted, 32-byte page reads, and the Block 0 handshake (on-demand trigger only, chip select, reading counter, live status bits, latched fault byte: SHT31 no-acknowledge or checksum, LPS35HW no-acknowledge or timeout, unit reset at boot). Data moved from the legacy 0x02–0x0A raw counts to 0x28–0x35 in the units above, and the default address from 0x42 to 0x48. The readings-requested word and the sleep bit are accepted without effect. Unreleased and not yet validated on hardware.
+> **Migration note:** the firmware on `master` has implemented this map since 2026-09-23 (patch 1): Page 0 from EEPROM with CRC check, the writable-register rule with the address persisted, 32-byte page reads, and the Block 0 handshake (on-demand trigger only, chip select, reading counter, live status bits, latched fault byte: SHT31 no-acknowledge or checksum, LPS35HW no-acknowledge or timeout, unit reset at boot). Data moved from the legacy 0x02–0x0A raw counts to 0x28–0x35 in the units above, and the default address moved from 0x42 to 0x48. The firmware accepts the readings-requested word and the sleep bit without effect. It is unreleased and not yet validated on hardware.
 
-No Page 2. Both sensors are factory-calibrated; no user calibration step.
+No Page 2. Both sensors are factory-calibrated. There is no user calibration step.
 
-> **I²C address note:** `0x48` (`'H'`) is also a common address for the ADS1115 ADC. There is no conflict among NW devices, but a system that independently uses an ADS1115 on the same bus must ensure the ADS1115 is configured to a different address (ADDR pin to GND = `0x48`, VDD = `0x49`, SDA = `0x4A`, SCL = `0x4B` — avoid `0x48`).
+> **I²C address note:** `0x48` (`'H'`) is also a common address for the ADS1115 ADC. There is no conflict among NW devices. If your system independently uses an ADS1115 on the same bus, configure the ADS1115 to a different address (ADDR pin to GND = `0x48`, VDD = `0x49`, SDA = `0x4A`, SCL = `0x4B` – avoid `0x48`).
 
 **LPS35HW pressure sensor characteristics:**
 
@@ -500,7 +490,7 @@ No Page 2. Both sensors are factory-calibrated; no user calibration step.
 | Stored range | 26,000–126,000 |
 | Effective noise floor | ~0.002 hPa RMS @ 1 Hz |
 
-Unit rationale: 0.01 hPa is the natural meteorological unit and aligns with the LPS35HW's native hPa output. The Walrus pressure register uses µBar (see below); the difference is intentional — each unit matches its sensor's native output format.
+Unit rationale: 0.01 hPa is the natural meteorological unit, and it aligns with the LPS35HW's native hPa output. The Walrus pressure register uses µBar (see below). The difference is intentional – each unit matches its sensor's native output format.
 
 ---
 
@@ -524,7 +514,7 @@ Chip table:
 | 0 | MS5803 | pressure, temperature |
 | 1 | MCP9808 | external (water) temperature |
 
-Block 0 (0x20–0x27) is the universal block. Config (0x26): bits 1:0 = free-running update period, 0 = 5 s, 1 = 10 s, 2 = 60 s, 3 = 300 s (as the former control register 0x00); bits 7:2 reserved.
+Block 0 (0x20–0x27) is the universal block. Config (0x26): bits 1:0 = free-running update period, 0 = 5 s, 1 = 10 s, 2 = 60 s, 3 = 300 s (as the former control register 0x00). Bits 7:2 reserved.
 
 ```
 Block 1 (0x28–0x2F)   MS5803 — pressure + temperature
@@ -539,9 +529,9 @@ Block 2 (0x30–0x37)   MCP9808 — external temperature
 Block 3 (0x38–0x3F)   Reserved
 ```
 
-> **Migration note:** firmware and library on `master` moved this data from 0x22 to 0x28, and the update-period configuration from 0x00 to 0x26, on 2026-09-21 (unreleased). On 2026-09-23 the firmware (patch 1) gained Page 0 from EEPROM with CRC check, the writable-register rule with the address persisted to EEPROM, 32-byte page reads, and the Block 0 handshake: trigger or free-running timer, chip select, reading counter, live status bits and the latched fault byte (kind 1 per chip, unit kind 6 at boot, kind 3 for an invalid Page 0). The readings-requested word and the sleep bit are accepted without effect. Walrus_Library moved onto NW_Core the same day: begin() gates on Page 0 (minimum patch 1), one triggered reading per getString() through the counter, chip faults to -9999. Hardware validation is Project-Walrus #18.
+> **Migration note:** firmware and library on `master` moved this data from 0x22 to 0x28, and the update-period configuration from 0x00 to 0x26, on 2026-09-21 (unreleased). On 2026-09-23 the firmware (patch 1) gained Page 0 from EEPROM with CRC check, the writable-register rule with the address persisted to EEPROM, 32-byte page reads, and the Block 0 handshake: trigger or free-running timer, chip select, reading counter, live status bits and the latched fault byte (kind 1 per chip, unit kind 6 at boot, kind 3 for an invalid Page 0). The firmware accepts the readings-requested word and the sleep bit without effect. Walrus_Library moved onto NW_Core the same day: begin() gates on Page 0 (minimum patch 1), one triggered reading per getString() through the counter, chip faults to -9999. Hardware validation is Project-Walrus #18.
 
-No Page 2. MS5803 calibration coefficients are read from its internal PROM at startup; MCP9808 is factory-calibrated.
+No Page 2. MS5803 calibration coefficients are read from its internal PROM at startup. The MCP9808 is factory-calibrated.
 
 **MS5803 pressure sensor characteristics by variant:**
 
@@ -552,9 +542,9 @@ No Page 2. MS5803 calibration coefficients are read from its internal PROM at st
 | MS5803-05BA | Medium depth | 0–6 bar | ~0.050 mbar (50 µBar) | 0–6,000,000 |
 | MS5803-14BA | Deep water | 0–14 bar | ~0.200 mbar (200 µBar) | 0–14,000,000 |
 
-All variants fit within int32 (~2.1 billion µBar max). The -01BA installed in a Walrus makes it a high-resolution barometer; installed -02BA/-05BA variants measure water column depth (1 mbar ≈ 1 cm water).
+All variants fit within int32 (~2.1 billion µBar max). The -01BA installed in a Walrus makes it a high-resolution barometer. Installed -02BA/-05BA variants measure water column depth (1 mbar ≈ 1 cm water).
 
-Unit rationale: µBar is the MS5803 library's internal `_pressure_actual` unit, requiring no conversion in firmware. The Haar pressure register uses 0.01 hPa; the difference is intentional — each unit matches its sensor's native output format.
+Unit rationale: µBar is the MS5803 library's internal `_pressure_actual` unit, and it requires no conversion in firmware. The Haar pressure register uses 0.01 hPa. The difference is intentional – each unit matches its sensor's native output format.
 
 ---
 
@@ -581,9 +571,7 @@ Chip table:
 | 2 | ADS1115 | IR short, IR mid, thermistor temperature |
 | 3 | ADXL343 | X, Y, Z (hardware v2 only) |
 
-Block 0 (0x20–0x27) is the universal block. Config (0x26): bits 1:0 = free-running update period (0 = 5 s, 1 = 10 s, 2 = 60 s, 3 = 300 s); bit 2 = auto-range disable (0 = auto-range each reading, as the former control register); bit 3 = run auto-range once now (self-clearing); bits 7:4 reserved.
-
-Libelle carries 26 bytes of data, more than Blocks 1–3 hold, so the accelerometer continues on Page 3.
+Block 0 (0x20–0x27) is the universal block. Config (0x26): bits 1:0 = free-running update period (0 = 5 s, 1 = 10 s, 2 = 60 s, 3 = 300 s). Bit 2 = auto-range disable (0 = auto-range each reading, as the former control register). Bit 3 = run auto-range once now (self-clearing). Bits 7:4 reserved. Libelle carries 26 bytes of data, more than Blocks 1–3 hold, and the accelerometer therefore continues on Page 3.
 
 ```
 Block 1 (0x28–0x2F)   VEML6030 — visible light
@@ -610,13 +598,13 @@ Page 3, Block 0 (0x60–0x67)   ADXL343 — accelerometer (hardware v2 only)
 Page 3, Blocks 1–3 (0x68–0x7F)   Reserved
 ```
 
-No Page 2. Calibration constants (Steinhart-Hart coefficients, UV cross-talk compensation) are hardcoded in the library. If per-unit calibration is added, Page 2 is the natural home.
+No Page 2. Calibration constants (Steinhart-Hart coefficients, UV cross-talk compensation) are hardcoded in the library. If you add per-unit calibration, Page 2 is the natural home.
 
-> **Hardware v1 note:** The ADXL343 accelerometer is wired to the controller I2C bus (addresses 0x1D / 0x53) and is not bridged through the ATtiny register map. Page 3 is not served on v1 hardware. Hardware v2 will move the ADXL343 to the ATtiny software I2C bus, enabling single-address access. See [Project-Libelle issue #19](https://github.com/NorthernWidget-Skunkworks/Project-Libelle/issues/19).
+> **Hardware v1 note:** The ADXL343 accelerometer is wired to the controller I2C bus (addresses 0x1D / 0x53), not bridged through the ATtiny register map. v1 hardware does not serve Page 3. Hardware v2 will move the ADXL343 to the ATtiny software I2C bus, which enables single-address access. See [Project-Libelle issue #19](https://github.com/NorthernWidget-Skunkworks/Project-Libelle/issues/19).
 
-> **Planned MCU migration:** Hardware v2 is proposed to migrate from the ATtiny841 (512 B EEPROM, Page 0 at `0x01E0`) to the ATtiny1634 (256 B EEPROM, Page 0 at `0x00E0`), aligning Libelle with Apis, Haar, and Walrus. The provisioning table and avrdude part will update accordingly. See [Project-Libelle issue #20](https://github.com/NorthernWidget-Skunkworks/Project-Libelle/issues/20).
+> **Planned MCU migration:** The proposal for hardware v2 is to migrate from the ATtiny841 (512 B EEPROM, Page 0 at `0x01E0`) to the ATtiny1634 (256 B EEPROM, Page 0 at `0x00E0`), which aligns Libelle with Apis, Haar, and Walrus. The provisioning table and avrdude part will update accordingly. See [Project-Libelle issue #20](https://github.com/NorthernWidget-Skunkworks/Project-Libelle/issues/20).
 
-> **Known bug in deployed firmware:** The firmware writes UVB starting at register 0x07; the library reads it from 0x06. This causes `getUVB()` to return approximately true_UVB × 256. All historical UVB data is affected. See [Project-Libelle issue #18](https://github.com/NorthernWidget-Skunkworks/Project-Libelle/issues/18).
+> **Known bug in deployed firmware:** The firmware writes UVB starting at register 0x07, but the library reads it from 0x06. `getUVB()` therefore returns approximately true_UVB × 256. All historical UVB data is affected. See [Project-Libelle issue #18](https://github.com/NorthernWidget-Skunkworks/Project-Libelle/issues/18).
 
 ### Liasis (longwave pyrgeometer)
 
@@ -629,17 +617,17 @@ Block 2:  Board type=0x6C01 ('l'=0x6C, rev 1), Group ID=[mfr], Unique ID=[mfr], 
 Block 3:  Reserved, Magic=0x4E, CRC=[computed], I2C address=TBD
 ```
 
-Note: `0x6C00` is reserved — it was assigned to Apis before the ASCII-initial naming convention was established. Legacy deployed units carry board types `0x2400`/`0x2401` (formerly Dyson LW, Monarch LW).
+Note: `0x6C00` is reserved. It was assigned to Apis before the ASCII-initial naming convention was established. Legacy deployed units carry board types `0x2400`/`0x2401` (formerly Dyson LW, Monarch LW).
 
 #### Page 1 (0x20–0x3F) — Sensor data
 
-Page 1 layout TBD. Liasis does not currently have an onboard MCU; it communicates via the host controller's I²C bus rather than exposing its own register map. Page 1 and the I²C address will be defined once Liasis is updated to carry its own MCU, at which point Block 0 follows the universal layout and the chip table will be: 0 = ADS1115 (thermopile and thermistor channels). Config (0x26) would then carry the ADS1115 gain and data-rate selections.
+Page 1 layout TBD. Liasis does not currently have an onboard MCU: it communicates via the host controller's I²C bus rather than exposing its own register map. Page 1 and the I²C address will be defined once Liasis is updated to carry its own MCU. At that point Block 0 follows the universal layout, and the chip table will be: 0 = ADS1115 (thermopile and thermistor channels). Config (0x26) would then carry the ADS1115 gain and data-rate selections.
 
 ---
 
 ### Okapi (data logger with solar charging and telemetry)
 
-Okapi is an I²C controller communicating with a Particle Boron telemetry board via UART; it has no current peripheral interface. Schema 1 formalizes its EEPROM serial number as Page 0 and reserves a hypothetical Page 1 for status reporting to the Boron or any higher-level device. The UART transport requires a framing layer (Magic Preamble or COBS; see [Transport](#transport)).
+Okapi is an I²C controller that communicates with a Particle Boron telemetry board via UART, and it has no current peripheral interface. Schema 1 formalizes its EEPROM serial number as Page 0 and reserves a hypothetical Page 1 for status reporting to the Boron or any higher-level device. The UART transport requires a framing layer (Magic Preamble or COBS, see [Transport](#transport)).
 
 #### Page 0
 
@@ -654,7 +642,7 @@ Pre-production prototype units ("Resnik") carry board type `0x9950` and are not 
 
 #### Page 1 (0x20–0x3F) — Logger status — HYPOTHETICAL
 
-Subsystem table (a logger's "chips" are its subsystems; same index rules):
+Subsystem table (a logger's "chips" are its subsystems, with the same index rules):
 
 | Index | Subsystem |
 |-------|-----------|
@@ -665,7 +653,7 @@ Subsystem table (a logger's "chips" are its subsystems; same index rules):
 | 4 | LiPo / solar charger |
 | 5 | AA backup rail |
 
-Block 0 (0x20–0x27) is the universal block. Config (0x26): reserved. A logger's data exceeds 24 bytes, so logger state continues on Page 3.
+Block 0 (0x20–0x27) is the universal block. Config (0x26): reserved. A logger's data exceeds 24 bytes, and logger state therefore continues on Page 3.
 
 ```
 Block 1 (0x28–0x2F)   Power
@@ -698,7 +686,7 @@ No Page 2. Calibration constants are hardcoded in the library.
 
 ### Margay (data logger)
 
-Margay is an I²C controller, not a peripheral — it queries sensors on the bus rather than responding to queries itself. Schema 1 formalizes its existing EEPROM serial number as Page 0, and defines a hypothetical Page 1 for the case where Margay ever acts as an I²C peripheral of a higher-level device (e.g., a cellular gateway or satellite modem). **Page 1 is not implemented; it is reserved for future use.**
+Margay is an I²C controller, not a peripheral – it queries sensors on the bus rather than responding to queries itself. Schema 1 formalizes its existing EEPROM serial number as Page 0, and defines a hypothetical Page 1 for the case where Margay ever acts as an I²C peripheral of a higher-level device (e.g., a cellular gateway or satellite modem). **Page 1 is not implemented. It is reserved for future use.**
 
 #### Page 0
 
@@ -709,13 +697,11 @@ Block 2:  Board type=0x4D03 ('M'=0x4D, rev 3), Group ID=[mfr], Unique ID=[mfr], 
 Block 3:  Reserved, Magic=0x4E, CRC=[computed], I²C address=0x00 (unassigned)
 ```
 
-Block 2 keeps the format of the existing 8-byte Schema 0 EEPROM serial number (board type, group ID, unique ID, FirmwareID) with no data loss, but not its location: Schema 0 wrote those 8 bytes at the very end of EEPROM, which under Schema 1 is Block 3 (reserved, magic, CRC, address), while Block 2 sits 8 bytes earlier at Page 0 offset 0x10–0x17. A logger library that reads its serial number from the last 8 bytes therefore reads Block 3 once the board is provisioned; it must read Page 0 (schema byte 0x01, magic, CRC) and take the serial number from Block 2, falling back to the old location when the schema byte is not 0x01. The board type encoding (`'M'` = 0x4D high byte, revision index low byte) already followed the Schema 1 convention before the spec was written.
+Block 2 keeps the format of the existing 8-byte Schema 0 EEPROM serial number (board type, group ID, unique ID, FirmwareID) with no data loss, but not its location: Schema 0 wrote those 8 bytes at the very end of EEPROM, which under Schema 1 is Block 3 (reserved, magic, CRC, address), while Block 2 sits 8 bytes earlier at Page 0 offset 0x10–0x17. A logger library that reads its serial number from the last 8 bytes therefore reads Block 3 once the board is provisioned. Your library must instead read Page 0 (schema byte 0x01, magic, CRC) and take the serial number from Block 2, falling back to the old location when the schema byte is not 0x01. The board type encoding (`'M'` = 0x4D high byte, revision index low byte) already followed the Schema 1 convention before the spec was written.
 
 #### Page 1 (0x20–0x3F) — Logger status — HYPOTHETICAL
 
-If Margay ever gains an I²C peripheral interface, `0x4D` (ASCII `'M'`) is the natural address. The layout below exposes the data a higher-level device would most need: current time, battery state, onboard environment, and logger status.
-
-Subsystem table (same index rules as a sensor's chip table):
+If Margay ever gains an I²C peripheral interface, `0x4D` (ASCII `'M'`) is the natural address. The layout below exposes the data a higher-level device would most need: current time, battery state, onboard environment, and logger status. Its subsystem table follows the same index rules as a sensor's chip table:
 
 | Index | Subsystem |
 |-------|-----------|
@@ -758,10 +744,10 @@ No Page 2. Battery curve coefficients and Steinhart–Hart thermistor constants 
 
 All NW device addresses, current and proposed. Proposed addresses follow an ASCII-mnemonic scheme:
 
-- **Primary address** = ASCII code of the device's initial letter (uppercase), making addresses human-readable in a hex dump.
+- **Primary address** = ASCII code of the device's initial letter (uppercase), which makes addresses human-readable in a hex dump.
 - **Secondary address** applies only to devices with an on-board hardware jumper that selects between two fixed addresses (e.g. Libelle JP1 for UP/DOWN net-radiation pairs). The secondary address = primary address XOR `0x40`, which clears bit 6 and maps the letter to the control character at the analogous position in the ASCII table (zones 000/001 mirror zones 100/101). Secondary addresses therefore occupy the range `0x08`–`0x3F`, entirely outside the letter space reserved for primary addresses. Devices whose address is software-configurable via the EEPROM register at `0x1F` do not need a hardware secondary address.
 
-Controller-only devices (Margay, Okapi) have no current peripheral address; entries are reserved for hypothetical future peripheral interfaces.
+Controller-only devices (Margay, Okapi) have no current peripheral address, and their entries are reserved for hypothetical future peripheral interfaces.
 
 | Device | Type | Current address(es) | Proposed (Schema 1) | Mnemonic | Notes |
 |--------|------|---------------------|---------------------|----------|-------|
@@ -775,7 +761,7 @@ Controller-only devices (Margay, Okapi) have no current peripheral address; entr
 
 ### Bus occupancy
 
-The registry above lists NW devices. A sensor shares the bus with the logger's on-board chips as well, so the table below lists every address in use or reserved across the family, from the device appendices, the logger READMEs, the Okapi v1.0 schematic, and the sensor libraries. Chips whose address is set by pin strapping are marked; their actual strapping has not yet been read from the schematic (see the to-do below).
+The registry above lists NW devices. A sensor shares the bus with the logger's on-board chips as well, and the table below therefore lists every address in use or reserved across the family, from the device appendices, the logger READMEs, the Okapi v1.0 schematic, and the sensor libraries. Chips whose address is set by pin strapping are marked, but their actual strapping has not yet been read from the schematic (see the to-do below).
 
 | Address | NW device (Schema 1) | Logger on-board chips | Chips driven by a sensor library on the controller bus |
 |---------|----------------------|-----------------------|--------------------------------------------------------|
@@ -797,21 +783,21 @@ The registry above lists NW devices. A sensor shares the bus with the logger's o
 | `0x69`–`0x6B` | | Margay: MCP3421 ADC (by model) | |
 | `0x76`/`0x77` | | Margay, Okapi: BME280 | |
 
-**Potential clashes, pending the Okapi strapping:** Haar `0x48` against Okapi's on-board ADS1115 (and VEML6030 if strapped high); Walrus `0x57` against the FRAM's range. Whether either bites also depends on whether Okapi's on-board I²C segment is electrically joined to the sensor segment when the external bus is switched on. Okapi is a prototype under revision, so restrapping a chip is cheap; moving Haar or Walrus is not.
+**Potential clashes, pending the Okapi strapping:** Haar `0x48` against Okapi's on-board ADS1115 (and VEML6030 if strapped high), and Walrus `0x57` against the FRAM's range. Whether either bites also depends on whether Okapi's on-board I²C segment is electrically joined to the sensor segment when the external bus is switched on. Okapi is a prototype under revision, and restrapping a chip is therefore cheap. Moving Haar or Walrus is not.
 
-**To do:** read the ADDR strapping of the ADS1115, VEML6030, PAC1934, MB85RC, and BMA456 from the Okapi v1.0 schematic and the segment-switch topology, fill in this table, and resolve the two potential clashes. Tracked in [Project-Okapi issue #29](https://github.com/NorthernWidget-Skunkworks/Project-Okapi/issues/29).
+**To do:** (1) read the ADDR strapping of the ADS1115, VEML6030, PAC1934, MB85RC, and BMA456 from the Okapi v1.0 schematic and the segment-switch topology, (2) fill in this table, and (3) resolve the two potential clashes. Tracked in [Project-Okapi issue #29](https://github.com/NorthernWidget-Skunkworks/Project-Okapi/issues/29).
 
 ### Clashes requiring resolution
 
 1. **Walrus `0x4D` → Margay `'M'` = `0x4D`:** Walrus must migrate to `0x57` (`'W'`) in Schema 1. This is a breaking change to existing deployments.
 
-2. **Libelle DOWN `0x41` → Apis `'A'` = `0x41`:** Resolved in Schema 1. Libelle moves to `0x4C` (UP) and `0x0C` (DOWN); Apis takes `0x41`.
+2. **Libelle DOWN `0x41` → Apis `'A'` = `0x41`:** Resolved in Schema 1. Libelle moves to `0x4C` (UP) and `0x0C` (DOWN), and Apis takes `0x41`.
 
 ---
 
 ## Controller-side library design
 
-How a controller's Arduino library reads a Schema 1 device – the layered library shape, the one-sample raw-reading primitive, the proposed universal control register, and the naming conventions – is described in [LIBRARY-DESIGN.md](LIBRARY-DESIGN.md). Its handshake proposal is now the Page 1 Block 0 definition above; the rest is the library-side design and its work plan.
+[LIBRARY-DESIGN.md](LIBRARY-DESIGN.md) describes how a controller's Arduino library reads a Schema 1 device – the layered library shape, the one-sample raw-reading primitive, the proposed universal control register, and the naming conventions. Its handshake proposal is now the Page 1 Block 0 definition above. The rest is the library-side design and its work plan.
 
 ---
 
@@ -829,10 +815,10 @@ Tracks whether each device's library/firmware and hardware have been updated for
 | Margay | — | — | — | — |
 | Okapi | — | — | — | — |
 
-**Library / firmware:** library updated to build and serve Schema 1 Page 0; `begin()` validates schema byte.
-**Hardware:** new board revision tagged (if required); Page 0 EEPROM provisioned via nw-provision.
-**Integration check:** register map verified against this spec; library compiles against it; data types confirmed.
-**Physical test:** library and hardware tested together on real hardware; data confirmed correct end-to-end.
+**Library / firmware:** library updated to build and serve Schema 1 Page 0, and `begin()` validates the schema byte.
+**Hardware:** new board revision tagged (if required), and Page 0 EEPROM provisioned via nw-provision.
+**Integration check:** register map verified against this spec, library compiles against it, and data types confirmed.
+**Physical test:** library and hardware tested together on real hardware, and data confirmed correct end-to-end.
 
 Note: Liasis shows `—` across all columns because it does not yet have an onboard MCU. All columns will remain not applicable until the hardware is updated. See [Project-Liasis issue #2](https://github.com/NorthernWidget-Skunkworks/Project-Liasis/issues/2).
 
