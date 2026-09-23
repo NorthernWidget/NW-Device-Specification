@@ -537,7 +537,7 @@ Block 2 (0x30–0x37)   MCP9808 — external temperature
 Block 3 (0x38–0x3F)   Reserved
 ```
 
-> **Migration note:** firmware and library on `master` moved this data from 0x22 to 0x28, and the update-period configuration from 0x00 to 0x26, on 2026-09-21 (unreleased). On 2026-09-23 the firmware (patch 1) gained Page 0 from EEPROM with CRC check, the writable-register rule with the address persisted to EEPROM, 32-byte page reads, and the Block 0 handshake: trigger or free-running timer, chip select, reading counter, live status bits and the latched fault byte (kind 1 per chip, unit kind 6 at boot, kind 3 for an invalid Page 0). The readings-requested word and the sleep bit are accepted without effect. Hardware validation is Project-Walrus #18; the library does not yet use the handshake.
+> **Migration note:** firmware and library on `master` moved this data from 0x22 to 0x28, and the update-period configuration from 0x00 to 0x26, on 2026-09-21 (unreleased). On 2026-09-23 the firmware (patch 1) gained Page 0 from EEPROM with CRC check, the writable-register rule with the address persisted to EEPROM, 32-byte page reads, and the Block 0 handshake: trigger or free-running timer, chip select, reading counter, live status bits and the latched fault byte (kind 1 per chip, unit kind 6 at boot, kind 3 for an invalid Page 0). The readings-requested word and the sleep bit are accepted without effect. Walrus_Library moved onto NW_Core the same day: begin() gates on Page 0 (minimum patch 1), one triggered reading per getString() through the counter, chip faults to -9999. Hardware validation is Project-Walrus #18.
 
 No Page 2. MS5803 calibration coefficients are read from its internal PROM at startup; MCP9808 is factory-calibrated.
 
