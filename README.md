@@ -405,7 +405,7 @@ Chip table (index used by status bits 1–6, control chip-select bits 1–6, and
 | 0 | LiDAR Lite v3HP | range, signal strength |
 | 1 | LIS3DH accelerometer | X, Y, Z |
 
-Block 0 (0x20–0x27) is the universal block. Config (0x26): bits 1:0 = LiDAR sensitivity (as the former register 0x25), bits 7:2 reserved. Firmware patch 1 clears the sleep bit without sleeping (implementation deferred) and free-runs every 100 ms in addition to answering triggers.
+Block 0 (0x20–0x27) is the universal block. Config (0x26): bits 1:0 = LiDAR sensitivity (as the former register 0x25); bits 7:2 reserved. Firmware patch 1 clears the sleep bit without sleeping (implementation deferred) and free-runs every 100 ms in addition to answering triggers.
 
 **Run model (firmware patch 2, Project-Apis #23).** The unit is on-demand: it idles until a trigger, and there is no free-running cycle. The firmware powers the LiDAR through the board's 5 V switch and its enable pin only while readings are being taken, per the readings-requested word (0x24–0x25): powered up at the first trigger, powered down when the requested count is done. Power-up sequence: (1) 5 V switch on, (2) a short wait for the rail (680 µF through the MIC2544 at its ~227 mA limit), (3) enable high, and (4) a poll of the LiDAR for an I²C acknowledge and the health flag in its STATUS register (0x01 bit 5) rather than a fixed delay. On timeout the firmware toggles the enable once more, and a second failure powers the LiDAR down, latches fault chip 0 kind 1 (no acknowledge) or 5 (not initialised), and completes the reading with range −9999. Each acquisition writes ACQ_COMMAND (0x00, where any non-zero value starts a measurement on the v3HP) and polls STATUS bit 0 (busy) until clear before reading the distance registers. The LiDAR's mode pin is not used (on this board it is held high through a 1 kΩ resistor and cannot indicate busy). The firmware reads the accelerometer on every reading in which it is selected. Serial output exists only in debug builds.
 
@@ -514,7 +514,7 @@ Chip table:
 | 0 | MS5803 | pressure, temperature |
 | 1 | MCP9808 | external (water) temperature |
 
-Block 0 (0x20–0x27) is the universal block. Config (0x26): bits 1:0 = free-running update period, 0 = 5 s, 1 = 10 s, 2 = 60 s, 3 = 300 s (as the former control register 0x00). Bits 7:2 reserved.
+Block 0 (0x20–0x27) is the universal block. Config (0x26): bits 1:0 = free-running update period, 0 = 5 s, 1 = 10 s, 2 = 60 s, 3 = 300 s (as the former control register 0x00); bits 7:2 reserved.
 
 ```
 Block 1 (0x28–0x2F)   MS5803 – pressure + temperature
@@ -571,7 +571,7 @@ Chip table:
 | 2 | ADS1115 | IR short, IR mid, thermistor temperature |
 | 3 | ADXL343 | X, Y, Z (hardware v2 only) |
 
-Block 0 (0x20–0x27) is the universal block. Config (0x26): bits 1:0 = free-running update period (0 = 5 s, 1 = 10 s, 2 = 60 s, 3 = 300 s). Bit 2 = auto-range disable (0 = auto-range each reading, as the former control register). Bit 3 = run auto-range once now (self-clearing). Bits 7:4 reserved. Libelle carries 26 bytes of data, more than Blocks 1–3 hold, and the accelerometer therefore continues on Page 3.
+Block 0 (0x20–0x27) is the universal block. Config (0x26): bits 1:0 = free-running update period (0 = 5 s, 1 = 10 s, 2 = 60 s, 3 = 300 s); bit 2 = auto-range disable (0 = auto-range each reading, as the former control register); bit 3 = run auto-range once now (self-clearing); bits 7:4 reserved.
 
 ```
 Block 1 (0x28–0x2F)   VEML6030 – visible light
@@ -820,7 +820,7 @@ Tracks whether each device's library/firmware and hardware have been updated for
 **Integration check:** register map verified against this spec, library compiles against it, and data types confirmed.
 **Physical test:** library and hardware tested together on real hardware, and data confirmed correct end-to-end.
 
-Note: Liasis shows `—` across all columns because it does not yet have an onboard MCU. All columns will remain not applicable until the hardware is updated. See [Project-Liasis issue #2](https://github.com/NorthernWidget-Skunkworks/Project-Liasis/issues/2).
+Note: Liasis shows `–` across all columns because it does not yet have an onboard MCU. All columns will remain not applicable until the hardware is updated. See [Project-Liasis issue #2](https://github.com/NorthernWidget-Skunkworks/Project-Liasis/issues/2).
 
 ---
 
