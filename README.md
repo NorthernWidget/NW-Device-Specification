@@ -409,6 +409,8 @@ Block 0 (0x20–0x27) is the universal block. Config (0x26): bits 1:0 = LiDAR se
 
 **Run model (firmware patch 2, Project-Apis #23).** The unit is on-demand: it idles until a trigger, and there is no free-running cycle. The firmware powers the LiDAR through the board's 5 V switch and its enable pin only while readings are being taken, per the readings-requested word (0x24–0x25): powered up at the first trigger, powered down when the requested count is done. Power-up sequence: (1) 5 V switch on, (2) a short wait for the rail (680 µF through the MIC2544 at its ~227 mA limit), (3) enable high, and (4) a poll of the LiDAR for an I²C acknowledge and the health flag in its STATUS register (0x01 bit 5) rather than a fixed delay. On timeout the firmware toggles the enable once more, and a second failure powers the LiDAR down, latches fault chip 0 kind 1 (no acknowledge) or 5 (not initialised), and completes the reading with range −9999. Each acquisition writes ACQ_COMMAND (0x00, where any non-zero value starts a measurement on the v3HP) and polls STATUS bit 0 (busy) until clear before reading the distance registers. The LiDAR's mode pin is not used (on this board it is held high through a 1 kΩ resistor and cannot indicate busy). The firmware reads the accelerometer on every reading in which it is selected. Serial output exists only in debug builds.
 
+**Inclination (firmware patch 3, 2026-09-23).** The LIS3DH runs at 10 Hz (5 Hz bandwidth, about 0.5 mg rms per sample) and each reading waits for a fresh sample, so consecutive readings are independent. Its temperature sensor is on, and the OUT_ADC3 word is served beside the axes at 0x36 for a per-unit drift correction; the zero taken with the magnet present averages samples until the standard error of every axis mean is below 0.25 counts (at least 32, at most 1000 samples) and stores its temperature at 0x46. The library requires patch 3.
+
 ```
 Block 1 (0x28–0x2F)   LiDAR Lite
   0x28–0x29   Range [cm], little-endian int16
@@ -419,7 +421,8 @@ Block 2 (0x30–0x37)   Accelerometer
   0x30–0x31   Accel X, little-endian int16
   0x32–0x33   Accel Y, little-endian int16
   0x34–0x35   Accel Z, little-endian int16
-  0x36–0x37   Reserved
+  0x36–0x37   Accel temperature, the LIS3DH OUT_ADC3 word as read (low byte first): relative,
+              1 digit per °C in the high byte (firmware patch 3; the reference for a drift correction)
 
 Block 3 (0x38–0x3F)   Reserved
 ```
@@ -431,7 +434,7 @@ Block 0 (0x40–0x47)   Accelerometer offsets
   0x40–0x41   Offset X, little-endian int16
   0x42–0x43   Offset Y, little-endian int16
   0x44–0x45   Offset Z, little-endian int16
-  0x46–0x47   Reserved
+  0x46–0x47   Accel temperature word when the offsets were taken (firmware patch 3)
 
 Block 1–3 (0x48–0x5F)   Reserved
 ```
