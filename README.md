@@ -746,7 +746,7 @@ Block 2 keeps the format of the existing 8-byte Schema 0 EEPROM serial number (b
 Written once by NW-Provision per board, from the hardware model; the library reads it at boot and falls back to its built-in constants when the page is blank (0xFF).
 
 ```
-  0x20–0x21   Battery divider × 1000, uint16 (2000 for models 1.0–2.x, 9000 for 3.0)
+  0x20–0x21   Battery divider × 1000, uint16 (2000 for models 1.0–3.x; 9000 for the v0.0 prototype only)
   0x22–0x31   Thermistor Steinhart–Hart A, B, C, D, float32 each, little-endian
   0x32–0x33   Battery low threshold, uint16, 0.01 V (a fault below it)
   0x34        Battery warning, uint8, percent (a notice below it)
