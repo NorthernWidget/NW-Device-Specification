@@ -391,14 +391,14 @@ Legacy deployed units carry board type `0x6C00` and I²C address `0x50` (pre-Sch
 #### Page 1 (0x20–0x3F): Calibration
 
 ```
-Block 0 (0x20–0x27)   Accelerometer offsets
-  0x20–0x21   Offset X, little-endian int16
-  0x22–0x23   Offset Y, little-endian int16
-  0x24–0x25   Offset Z, little-endian int16
-  0x26–0x27   Accel temperature word when the offsets were taken (firmware patch 3)
-
-Block 1–3 (0x28–0x3F)   Reserved
+Block 0 (0x20–0x27)   Current zero: Offset X, Y, Z int16 LE; accel temperature word int16   (as today)
+Block 1 (0x28–0x2F)   Previous zero, same form
+Block 2 (0x30–0x37)   The zero before that, same form
+Block 3 (0x38–0x3F)   0x38–0x39 zero generation, uint16 LE: zeros stored since manufacture (0 = never);
+                      0x3A–0x3F reserved
 ```
+
+The current zero in full (firmware patch 3): Offset X at 0x20–0x21, Y at 0x22–0x23, Z at 0x24–0x25, each little-endian int16, and at 0x26–0x27 the accelerometer temperature word when the offsets were taken. Storing a zero (firmware patch 5) shifts Block 1 to Block 2 and Block 0 to Block 1, writes the new zero into Block 0, and adds one to the generation (a blank 0xFFFF reads as 0), byte by byte with compare-before-write; the served page and the mirror at 0x58 follow at once, and notice 0x29 (calibration stored) is latched as before. A blank word anywhere on the page reads as 0.
 
 ---
 
@@ -415,7 +415,7 @@ Block 0 (0x40–0x47) is the universal block. Config (0x46): bits 1:0 = LiDAR se
 
 **Run model (firmware patch 2, Project-Apis #23).** The unit is on-demand: it idles until a trigger, and there is no free-running cycle. The firmware powers the LiDAR through the board's 5 V switch and its enable pin only while readings are being taken, per the readings-requested word (0x44–0x45): powered up at the first trigger, powered down when the requested count is done. Power-up sequence: (1) 5 V switch on, (2) a short wait for the rail (680 µF through the MIC2544 at its ~227 mA limit), (3) enable high, and (4) a poll of the LiDAR for an I²C acknowledge and the health flag in its STATUS register (0x01 bit 5) rather than a fixed delay. On timeout the firmware toggles the enable once more, and a second failure powers the LiDAR down, latches fault chip 0 kind 1 (no acknowledge) or 5 (not initialised), and completes the reading with range −9999. Each acquisition writes ACQ_COMMAND (0x00, where any non-zero value starts a measurement on the v3HP) and polls STATUS bit 0 (busy) until clear before reading the distance registers. The LiDAR's mode pin is not used (on this board it is held high through a 1 kΩ resistor and cannot indicate busy). The firmware reads the accelerometer on every reading in which it is selected. Serial output exists only in debug builds.
 
-**Inclination (firmware patch 3, 2026-09-23).** The LIS3DH runs at 10 Hz (5 Hz bandwidth, about 0.5 mg rms per sample) and each reading waits for a fresh sample, so consecutive readings are independent. Its temperature sensor is on, and the OUT_ADC3 word is served beside the axes at 0x56 for a per-unit drift correction; a magnet at the Hall switch, at boot or later, starts a zero that averages samples until the standard error of every axis mean is below 0.25 counts (at least 32, at most 1000 samples) and stores its temperature at 0x26; the magnet need not stay. The library requires patch 3. Patch 4 reports through the Report register: kind 9 on chip 1 after a zero is stored (Page 2 holds it), kind 10 on chip 0 when a batch is abandoned (the LiDAR powered down because the controller stopped triggering); a notice never overwrites an unacknowledged fault.
+**Inclination (firmware patch 3, 2026-09-23).** The LIS3DH runs at 10 Hz (5 Hz bandwidth, about 0.5 mg rms per sample) and each reading waits for a fresh sample, so consecutive readings are independent. Its temperature sensor is on, and the OUT_ADC3 word is served beside the axes at 0x56 for a per-unit drift correction; a magnet at the Hall switch, at boot or later, starts a zero that averages samples until the standard error of every axis mean is below 0.25 counts (at least 32, at most 1000 samples) and stores its temperature at 0x26; the magnet need not stay. Patch 4 reports through the Report register: kind 9 on chip 1 after a zero is stored (Page 2 holds it), kind 10 on chip 0 when a batch is abandoned (the LiDAR powered down because the controller stopped triggering); a notice never overwrites an unacknowledged fault. Patch 5 keeps a record of the zeros: Page 1 holds the current zero and the two before it with a generation count, and the generation is mirrored into Page 2 Block 3 so that a logger sees a new zero in the reading itself; the library requires patch 5.
 
 ```
 Block 1 (0x48–0x4F)   LiDAR Lite
@@ -430,7 +430,8 @@ Block 2 (0x50–0x57)   Accelerometer
   0x56–0x57   Accel temperature, the LIS3DH OUT_ADC3 word as read (low byte first): relative,
               1 digit per °C in the high byte (firmware patch 3; the reference for a drift correction)
 
-Block 3 (0x58–0x5F)   Reserved
+Block 3 (0x58–0x5F)   0x58–0x59 zero generation, uint16 LE, the same value, served with every reading
+  0x5A–0x5F   Reserved
 ```
 
 ### Haar (temperature, pressure, relative humidity)
