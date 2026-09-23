@@ -160,3 +160,7 @@ See [version-numbering-standards](https://github.com/NorthernWidget/version-numb
 
 - The `Project-` prefix is a NorthernWidget convention for hardware design repos; see [CONTRIBUTING.md](CONTRIBUTING.md).
 - Controllers (Margay, Okapi) follow this same checklist. They do not require Schema 1 sensor register map compliance, but their board type should appear in NW-Registry.
+
+## Prose
+
+Write READMEs, specification text, design notes, issue bodies and commit bodies in Andy Wickert's voice at the first draft (his technical register: short sentences with a wide spread, second person, parentheses for asides, colons to structure, no semicolons, enumerated and triadic lists, spaced en-dashes and never em-dashes, mechanism asserted and only the reach hedged, three-sentence paragraphs with varied structure). The full guide is `WICKERT-VOICE.md` in the private wickert-voice repository, and the workspace `CLAUDE.md` carries the short card; load the guide before anything substantial and measure drafts over about 300 words with its script. Facts come before voice: check every number, name and date in the turn it is written.
