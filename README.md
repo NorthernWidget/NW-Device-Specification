@@ -3,6 +3,10 @@
 **Author:** Andy Wickert ([ORCID 0000-0002-9545-3365](https://orcid.org/0000-0002-9545-3365)), Northern Widget LLC
 **License:** [CC BY-SA 4.0](LICENSE)
 
+**Key words.** "Must", "must not", "should", and "may" carry the meanings of [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119): a "must" is a requirement without which a device or controller is not Schema 1; a "should" is the expected practice, departed from only for a reason the appendix records; a "may" is an option. Descriptive sentences ("the device clears ready") state what a conforming implementation does and are requirements all the same. The key words mark the places where the difference between a requirement and a recommendation matters.
+
+**Status.** A section is in one of three states: **normative** (decided; a change is a revision recorded in [CHANGELOG.md](CHANGELOG.md)), **proposed** (drafted for a decision, and dated), or **hypothetical** (a placeholder with no device behind it). A proposed or hypothetical section says so in its heading or its first line; every other section is normative. As of 2026-09-23 the address space, the EEPROM layout, Page 0, Page 2 Block 0 with the Report kinds, and the Apis, Haar, Walrus, Libelle, and Margay appendices are normative; Tally is proposed; Okapi's Page 2, Liasis, and the controllers' addresses in the registry are hypothetical. The [conformance checks](#conformance-checks) name the harness case that exercises each rule.
+
 This is a transport-agnostic specification for embedded device identity, communication, and data exchange on shared buses. Its target is low-power environmental sensors and data loggers, but any device that can expose a byte-addressable address space can implement it. The specification defines how a device presents itself – what it is, what version it runs, what it measures – and thereby lets a host (logger, microcontroller, or any I²C controller) discover it and interact with it automatically, without prior knowledge of the specific device.
 
 ---
@@ -133,7 +137,7 @@ EEPROM.read(STORED_BASE + 0x1F)  // I²C address
 EEPROM.read(STORED_BASE + 0x20)  // first calibration byte (Page 1, Block 0)
 ```
 
-The top of EEPROM protects identity and calibration from any code that writes EEPROM sequentially from address 0, a pattern common in user sketches on loggers and in firmware bugs. A dedicated programmer sketch, or [NW-Provision](https://github.com/NorthernWidget/NW-Provision), writes Page 0 once at manufacture; your production firmware never writes to Page 0 except the I²C address at 0x1F. Page 1 is written by the firmware when a calibration is stored (Apis's zero) and by nothing else. Keep all other device-specific EEPROM usage **below** `EEPROM[length−64]`. Devices with no calibration data still reserve Page 1 (`0xFF` unprogrammed or `0x00` by convention), so every device maps the same way. The CRC-8 at Page 0 offset 0x1E is checked at every boot.
+The top of EEPROM protects identity and calibration from any code that writes EEPROM sequentially from address 0, a pattern common in user sketches on loggers and in firmware bugs. A dedicated programmer sketch, or [NW-Provision](https://github.com/NorthernWidget/NW-Provision), writes Page 0 once at manufacture; your production firmware must never write to Page 0 except the I²C address at 0x1F. Page 1 must be written by the firmware only when a calibration is stored (Apis's zero), and by nothing else. Keep all other device-specific EEPROM usage **below** `EEPROM[length−64]`. Devices with no calibration data still reserve Page 1 (`0xFF` unprogrammed or `0x00` by convention), so every device maps the same way. The CRC-8 at Page 0 offset 0x1E must be checked at every boot.
 
 ---
 
@@ -206,7 +210,7 @@ The schema byte at 0x00 is the first thing your controller reads. Its decision t
 
 **`0x00` and `0xFF` are permanently reserved and will never be assigned to a valid schema.** `0x00` is the erased-then-overwritten default of the Margay serial number block (Schema 0), and `0xFF` is the hardware default of blank EEPROM. Both are unambiguously "not auto-detectable"; your controller need not distinguish between them. Valid schemas therefore occupy `0x01`–`0xFE`: 254 values, sufficient for any conceivable rate of fundamental protocol change.
 
-The 7-byte name field accommodates all current Northern Widget device names without truncation. A fixed-position name at a fixed address gives negligible collision probability with non-compliant devices, and no manufacturer prefix is required. Write reserved bytes as `0x00` at manufacture. `0xFF` indicates unprogrammed EEPROM.
+The 7-byte name field accommodates all current Northern Widget device names without truncation. A fixed-position name at a fixed address gives negligible collision probability with non-compliant devices, and no manufacturer prefix is required. Reserved bytes must be written as `0x00` at manufacture. `0xFF` indicates unprogrammed EEPROM.
 
 ### Block 1 (0x08–0x0F): Version
 
@@ -250,7 +254,7 @@ Address  Field       Size  Contents
   0x1C   Build flags 1 B   bit 0: the working tree held uncommitted changes when
                            the firmware was built (a "dirty" build). Bits 1–7: 0x00.
   0x1D   Magic byte  1 B   Fixed NW marker: always 0x4E (ASCII 'N'). A controller
-                           can check this byte as a quick sanity test before
+                           may check this byte as a quick sanity test before
                            computing the full CRC-8.
   0x1E   CRC         1 B   CRC-8/SMBUS over bytes 0x00–0x1D (polynomial 0x07,
                            init 0x00, no reflection, no final XOR). Standard variant
@@ -346,14 +350,14 @@ A library writes a report into a logger's note column as one token, the chip nam
 
 **Rules**
 
-- **Writable bytes.** Only 0x41, 0x44–0x45, and 0x46 accept writes on Page 2. Your firmware checks the register address in its receive handler and ignores writes elsewhere.
+- **Writable bytes.** Your device must accept writes only at 0x41, 0x44–0x45, and 0x46 on Page 2, and must ignore writes elsewhere: the firmware checks the register address in its receive handler.
 - **Readings requested (0x44–0x45).** Your controller writes the number of readings it is about to trigger, then triggers them one by one through the normal handshake. The device pays its chips' power-up and initialisation once, at the first trigger, and powers them down when the counter has advanced by the requested amount, and a single reading (0, or 1) is powered up and down around that one reading. The device keeps no idle timer: the count is the whole contract, and a controller that stops mid-batch therefore cannot leave a chip powered beyond the device's own fault fallback (a batch that does not complete within a device-defined time is abandoned, the chips powered down, and a fault latched). The count and the reading counter both count unit readings and move at the same moment. A single reading is a batch of one, and is the default. A chip selected at any trigger of a batch stays powered until the batch ends, the selection may change from trigger to trigger, and unselected chips keep their previous data.
-- **Ready and the counter.** The device clears ready the moment a reading begins, whether the controller triggered it or the device's own timer started it, and sets it when the data registers are complete. The reading counter increments at that same moment, after the data is in place, and your controller can therefore read the counter and the data in one transaction and never see a new count with old data. When the data take more than one transaction (a second page, or a read longer than the Wire buffer), or when the device starts readings on its own timer, read the counter again after the data: if it still holds the value captured before, every byte belongs to that reading; if it moved, capture and read again, a bounded number of times, then give up (NW_Core `readData()` does this with two retries).
-- **Atomic rewrite.** The device rewrites the data registers and increments the counter with interrupts disabled, and a page read therefore never straddles a rewrite.
+- **Ready and the counter.** The device clears ready the moment a reading begins, whether the controller triggered it or the device's own timer started it, and sets it when the data registers are complete. The reading counter increments at that same moment, after the data is in place, and your controller can therefore read the counter and the data in one transaction and never see a new count with old data. When the data take more than one transaction (a second page, or a read longer than the Wire buffer), or when the device starts readings on its own timer, your controller must read the counter again after the data: if it still holds the value captured before, every byte belongs to that reading; if it moved, capture and read again. The retries should be bounded, and the controller then gives up (NW_Core `readData()` allows two).
+- **Atomic rewrite.** Your device must rewrite the data registers and increment the counter with interrupts disabled, so that a page read never straddles a rewrite.
 - **Trigger.** A trigger written while a reading is in progress stays set, and the device honours it when the current reading completes. A trigger written while ready is set starts a new reading and clears ready: the controller never confuses the previous reading with the one it requested. A device may also start readings on its own schedule, and the trigger then adds one immediate reading without changing that schedule.
 - **Chip count.** Block 0 addresses up to six chip groups: six select bits, six fault bits, and a three-bit chip field with 7 meaning the unit. Chips that are always read together share an index. If your device has more than six independently selectable groups, define a second select byte and a second fault byte in its own data area and describe them in its appendix. Block 0 covers the first six and never changes.
-- **Faults and reports.** Status bits 1–6 show which chips are faulted *now* and clear when the chip next succeeds. The Report register at 0x47 holds the device's most recent report until the controller acknowledges it, which keeps a fault that cleared itself between readings visible and carries notices that no live bit could. Any write to Control acknowledges: it clears 0x47 to 0x00. If your controller triggers readings, it therefore acknowledges on every request. If it only reads a free-running device, it acknowledges whenever it sets chip select or sleep. Your controller reads Block 0 once before its first write, so that the reports the device made at boot (a reset, an invalid Page 0) reach it before the first acknowledgement.
-- **One report at a time.** The register holds one code. A fault overwrites a notice; a notice never overwrites an unacknowledged fault, and the device repeats the notice at its next reading if it still applies. Whatever a notice announces (a stored calibration, an abandoned batch) is also visible in the device's data or Page 2, so a lost notice loses nothing but the moment.
+- **Faults and reports.** Status bits 1–6 show which chips are faulted *now* and clear when the chip next succeeds. The Report register at 0x47 holds the device's most recent report until the controller acknowledges it, which keeps a fault that cleared itself between readings visible and carries notices that no live bit could. Any write to Control acknowledges: it clears 0x47 to 0x00. If your controller triggers readings, it therefore acknowledges on every request. If it only reads a free-running device, it acknowledges whenever it sets chip select or sleep. Your controller must read Block 0 once before its first write, so that the reports the device made at boot (a reset, an invalid Page 0) reach it before the first acknowledgement.
+- **One report at a time.** The register holds one code. A fault overwrites a notice; a notice must never overwrite an unacknowledged fault, and the device repeats the notice at its next reading if it still applies. Whatever a notice announces (a stored calibration, an abandoned batch) is also visible in the device's data or Page 2, so a lost notice loses nothing but the moment.
 - **Sleep.** After a transaction that sets bit 7, the device completes the transaction, then enters its lowest-power state. The ATtiny TWI slave wakes on address match, and no timer is needed, but the first transaction after waking may see a delayed acknowledge.
 - **Power-up state.** Status 0x00 (not ready), Control with every present chip selected, counter 0, Config 0x00, Report 0xE6 (the unit reset since the controller last configured it), or 0xE3 if Page 0 failed its check.
 
@@ -609,7 +613,7 @@ No Page 1. Calibration constants (Steinhart-Hart coefficients, UV cross-talk com
 
 > **Known bug in deployed firmware:** The firmware writes UVB starting at register 0x07, but the library reads it from 0x06. `getUVB()` therefore returns approximately true_UVB × 256. All historical UVB data is affected. See [Project-Libelle issue #18](https://github.com/NorthernWidget-Skunkworks/Project-Libelle/issues/18).
 
-### Liasis (longwave pyrgeometer)
+### Liasis (longwave pyrgeometer) – hypothetical until the board carries an MCU
 
 #### Page 0
 
