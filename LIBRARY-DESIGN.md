@@ -335,3 +335,30 @@ Verified by the reviewer before review: Apis harness passes (844 transactions); 
 9. **Library Manager:** `depends=NW_Core (>=1.0.0)` is valid syntax; Apis's registry name is `Apis`; the NorthernWidget-libraries bundle resolves nothing, so an NW_Core folder goes in it at the end-of-overhaul refresh; whether IDE 2 upgrades an installed Core when a consumer's constraint tightens is unverified.
 10. **Omissions fixed:** the per-reading ceiling is per device (Apis 500; Walrus's old 1000 ms was a `//FIX??` guess and the port keeps Core's 500 ms default, which exceeds its firmware's slowest path of a 100 ms poll plus the MS5803 conversions): Core gets `setTimeout(ms)`; `begin()` keeps storing the versions before refusing (harness test 8 depends on it); the step-2 commit carries `depends=`; `APIS_NOT_MEASURED` and the deprecated raw API stay untouched in Apis.
 11. **Acceptance per step:** harness byte-identical AND compile Apis_Demo for `arduino:avr:uno` and `NorthernWidget:avr:NW1284p` with flash/RAM recorded against the baseline above; Core's own harness (step 0) exercises the split handshake against an emulated free-running device.
+
+## 12. Logger core: what Margay and Okapi share *(surveyed 2026-09-23; a proposal, awaiting Andy's decision)*
+
+Andy asked, once the status file was in, what a shared logger library could take from Margay_Library and Okapi_Library. A read-only survey of `Margay.{h,cpp}` (1,732 lines) and `Okapi.{h,cpp}` (1,509 lines) answers it. The two loggers run the same MCU (ATmega1284P: Margay.cpp line 369, Okapi.cpp line 250), the same SD library (SdFat with the date-time callback), the same clock library (DS3231_Logger), and the same BME280 at 0x77. Okapi differs in what hangs off the bus: two ADS1115 (0x48, 0x49), an MCP4725 DAC (0x62), an MCP23018 port expander (0x20), two power rails with arbitration (`PowerAuto`, Okapi.cpp 884–911), solar and battery currents in its header row, and a backhaul block inside `Run` (745–776). Okapi has no NW_Core dependency, reads its serial number from the last 8 bytes of EEPROM (Okapi.cpp 126–135, the Schema 0 location that Page 1 now occupies), and still writes `/NW/<SN>/Logs/LogN.txt` with no zero padding and no status file (323–331, 461–470).
+
+**Moves verbatim** (the body is the same in both files, save for the case of names): about 330 lines, one copy instead of two.
+
+| Function | Margay.cpp | Okapi.cpp | Keep whose |
+|---|---|---|---|
+| `LED_Color` | 672–688 | 541–558 | either |
+| `getTime`, `dateTimeSD`, the three ISR trampolines, the log-flag ISRs, `PCINT0_vect` | 369–377, 690–693, 1084–1101, 1151–1165 | 250–256, 560–566, 842–862, 937–962 | either |
+| External-interrupt trio | 1104–1134 | 863–882 | Margay (its `cli()/sei()` around the 16-bit read; Okapi's read can tear) |
+| `clockTest` | 501–538 | 370–410 | Margay (Okapi reads the year at 393 even when the clock never answered) |
+| I²C scan loop | 395–420 | 271–294 | Margay (saves and restores the bus, warns on truncation) |
+| SD self-test (the Hamlet write and read-back) | 460–491 | 333–362 | Margay (Okapi's PASS/FAIL at 366–367 tests the wrong flag, so a read-back mismatch prints PASS) |
+| `begin()`: serial number, serial time-set, LED status dance, `begin(String)` | 206–261, 302–344, 379–382 | 123–150, 201–239, 258–262 | Margay (Schema 1 branch; Okapi's dash test uses absolute parity) |
+| `run`/`Run` skeleton | 850–907 | 721–813 | either, with Okapi's backhaul block as a hook |
+| `sleepNow` | 1168–1203 | 965–1024 | either |
+| `logStr`, the `initLogFile` free-number scan | 605–655 | 452–507 | Margay (Okapi's `LogStr` is declared `int` and returns nothing, 482–507) |
+
+**Needs one hook each**, a virtual on the base that each logger fills: `powerRails(bool)` (Margay `powerOB`/`powerAux` 1136–1149 against Okapi `PowerAuto`/`PowerAux` 884–921, called from the SD off and on paths), `busSelect(bool)` (917–943 against 923–930), `onBoardVals()` (758–792 against 604–650), `logDir()` (`/<SN>` against `/NW/<SN>/Logs`), `headerRow()` (632–636 against 476), and `watchdogPulse()` (Margay guards the 255 pin, 910–915; Okapi never sets its pin to output).
+
+**Stays per logger**: Margay's thermistor and battery arithmetic (695–756, 794–806) and MCP3421 (554–558, 823–847); Okapi's DAC (676–711), ADS1115 `GetVoltage` (713–719), `PowerAuto`, `ReadStr` (509–539), and the backhaul. Margay's status-file stack (`statusStr`, `watch`, `statusRow`, `reportRows`, `fillPages`, `chipFaults`, `printStatus`, `note`: 657–670, 982–1080) is written against `NW_Sensor` and `NW_Pages` and is generic already; it moves to the base the day Okapi gains its own `NW_Pages`, which is how Okapi gets a status file and a Page 0 read at once.
+
+**Naming.** Margay is the consistent one: camelCase functions and locals, PascalCase members, with three stragglers (`LED_Color`, `I2Ctest`, `SDtest`). Okapi mixes PascalCase for everything old with camelCase for everything added later (`begin`, the ext-int trio, the sleep and SD trio) in the same access block. A shared base takes Margay's rule, and Okapi's callers migrate forward (section 7, never an alias back).
+
+**Recommendation.** Build `NW_Logger` beside NW_Core as a base class that Margay and Okapi inherit, in the order (1) the verbatim block above with Margay's versions where the two differ, verified by the Margay harness and the eighteen NW-Tests sketches staying byte-identical and compiling, (2) the six hooks, (3) Okapi's Page 0 read and `NW_Pages`, which brings it the card layout and the status file for free. Okapi has no deployed units (memory: a prototype), so its card layout and file names can follow Margay's without a migration. The blast radius: Okapi_Library's every method name, its README and demo, and the nine Okapi sketches in NW-Tests; Margay's public surface does not change.
