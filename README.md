@@ -797,7 +797,7 @@ Page 3, Block 0 (0x60–0x67)   Logger state
 Page 3, Blocks 1–3 (0x68–0x7F)   Reserved
 ```
 
-Reports. The universal kinds apply to the chips (SDCardMissing is chip 0 kind 1, SDCardSelfTestFailed chip 0 kind 5, ClockNotAnswering chip 1 kind 1, BME280NotAnswering chip 2 kind 1, BatteryLow chip 4 kind 4, all faults; UnitRestarted at boot). Device-specific kinds:
+Reports. The universal kinds apply to the chips (SDCardNotAnswering, chip 0 kind 1, when no card is inserted; SDCardSelfTestFailed chip 0 kind 5; ClockNotAnswering chip 1 kind 1; BME280NotAnswering chip 2 kind 1; BatteryOutOfRange, chip 4 kind 4, below the low threshold; all faults, and their note tokens are the universal chip-plus-word form; UnitRestarted at boot). Device-specific kinds:
 
 | Code | Chip, kind | Note word | Fault or notice | When |
 |------|-----------|-----------|-----------------|------|
