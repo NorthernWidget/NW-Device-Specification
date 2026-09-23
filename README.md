@@ -628,7 +628,7 @@ Note: `0x6C00` is reserved. It was assigned to Apis before the ASCII-initial nam
 
 #### Page 2 (0x40–0x5F): Sensor data
 
-Page 2 layout TBD. Liasis does not currently have an onboard MCU: it communicates via the host controller's I²C bus rather than exposing its own register map. Page 2 and the I²C address will be defined once Liasis is updated to carry its own MCU. At that point Block 0 follows the universal layout, and the chip table will be: 0 = ADS1115 (thermopile and thermistor channels). Config (0x26) would then carry the ADS1115 gain and data-rate selections.
+Page 2 layout TBD. Liasis does not currently have an onboard MCU: it communicates via the host controller's I²C bus rather than exposing its own register map. Page 2 and the I²C address will be defined once Liasis is updated to carry its own MCU. At that point Block 0 follows the universal layout, and the chip table will be: 0 = ADS1115 (thermopile and thermistor channels). Config (0x46) would then carry the ADS1115 gain and data-rate selections.
 
 ---
 
@@ -654,7 +654,7 @@ Chip table:
 | 0 | Counter logic (16-bit hardware counter behind LOAD/CLK/DATA) | event count |
 | 1 | ATtiny841 ADC (the unit's own) | supercapacitor voltage |
 
-Block 0 (0x40–0x47) is the universal block. A trigger *latches*: the firmware reads and clears the hardware counter, adds the ticks to the running total, writes the total, and increments the reading counter. Config (0x26): bit 0 = capacitor disconnected from the charger (the legacy NOCAP command; 0 = charging, the power-on state); bits 7:1 reserved. There is no free-running cycle: the hardware counts continuously, and the firmware sleeps between transactions.
+Block 0 (0x40–0x47) is the universal block. A trigger *latches*: the firmware reads and clears the hardware counter, adds the ticks to the running total, writes the total, and increments the reading counter. Config (0x46): bit 0 = capacitor disconnected from the charger (the legacy NOCAP command; 0 = charging, the power-on state); bits 7:1 reserved. There is no free-running cycle: the hardware counts continuously, and the firmware sleeps between transactions.
 
 ```
 Block 1 (0x48–0x4F)   Counter
