@@ -19,11 +19,11 @@
 - Per-reading wait: the library's ceiling on waiting for the counter to move (Apis `timeoutGlobal`, 500 ms) must exceed the device's slowest path to ready, which is its fault path (Apis patch 2: failed power-up with one retry plus the accelerometer wait, ~440 ms). It is a ceiling, not a delay; only a device that acknowledges and then never completes reaches it. Derive it from the per-chip timing table once measured (Project-Apis #25).
 - Batch on a dead chip: the device does not retry a failed power-up on every trigger of the batch, and the library stops the batch at a power-up fault (chip fault kind 1 or 5), so an arbitrarily large N costs nothing when the chip is absent.
 - Batch abandonment (device-side timer, Apis 2 s): DEFERRED (Andy 2026-09-22) until "batch" itself is thought through; see #25 item 5.
-- Batches: the library writes the readings-requested word (0x24–0x25) before triggering N readings (`updateMeasurements()` with N > 1, or `beginReadings(component, n)`); the device holds its chips powered for exactly that many. One storage path: every acquisition appends to the measurement's static array; scalar getters read the last element; statistics read the array (decided 2026-09-22).
+- Batches: the library writes the readings-requested word (0x44–0x45) before triggering N readings (`updateMeasurements()` with N > 1, or `beginReadings(component, n)`); the device holds its chips powered for exactly that many. One storage path: every acquisition appends to the measurement's static array; scalar getters read the last element; statistics read the array (decided 2026-09-22).
 - Missing value on file: `-9999` (one named constant); Apis keeps `-9998` "not measured" until replaced.
 - Names: Arduino style everywhere, libraries and firmware; camelCase; class-scoped enums for selectors (`Apis::RANGE`); register constants file-local; no `NW_` prefix except for what Core exports. Casing migration is two steps (camelCase with `[[deprecated]]` aliases, then removal) – but a name already removed is never re-added; consumers migrate forward.
 
-**Device side (NW-Device-Specification, normative in its README).** Page 0 identity from EEPROM (top 32 bytes, CRC-8, magic 0x4E, address at 0x1F). Page 1 Block 0 universal: 0x20 status (ready, per-chip faults, pan-fault) · 0x21 control (trigger, chip select, sleep) · 0x22–0x23 reading counter · 0x24–0x25 readings requested (the count of readings the controller will trigger with the chips held powered; writable) · 0x26 device config · 0x27 latched fault (chip index + kind), cleared by any control write. Data from 0x28; Page 3 continues data past 24 bytes. Only 0x21, 0x24–0x25, and 0x26 writable; page rewrite atomic; ready clears when a reading starts and sets with the counter increment.
+**Device side (NW-Device-Specification, normative in its README).** Page 0 identity from EEPROM (top 32 bytes, CRC-8, magic 0x4E, address at 0x1F). Page 2 Block 0 universal: 0x20 status (ready, per-chip faults, pan-fault) · 0x21 control (trigger, chip select, sleep) · 0x22–0x23 reading counter · 0x24–0x25 readings requested (the count of readings the controller will trigger with the chips held powered; writable) · 0x26 device config · 0x27 latched fault (chip index + kind), cleared by any control write. Data from 0x28; Page 3 continues data past 24 bytes; pages renumbered 2026-09-23: calibration is Page 1 (0x20), data Page 2 (0x40). Only 0x21, 0x24–0x25, and 0x26 writable; page rewrite atomic; ready clears when a reading starts and sets with the counter increment.
 
 **Order.** Apis (done on master, untested) → bench test → Walrus → Haar → Core from what reproduces. Held/deferred: Tally list, header string format, sleep-bit firmware (TWI wake), Apis run model (next task), time/power estimates.
 
@@ -53,7 +53,7 @@ Two other threads meet here: the Schema 1 register map (NW-Device-Specification)
  │        └──────────────────┴──────────────────────┴──────────────────────┘      │
  ├───────────────────────────────────────────────────────────────────────────────┤
  │ Layer 1  HANDSHAKE – one pattern for every register-addressed NW device       │
- │   requestReading() → ready() poll with timeoutGlobal → readPage(0x20)          │
+ │   requestReading() → ready() poll with timeoutGlobal → readPage(0x40)          │
  ├───────────────────────────────────────────────────────────────────────────────┤
  │ Layer 0  PRIMITIVES – Bobby's helpers, camelCased, one signature each         │
  │   readByte writeByte readWord readWordLE writeWordLE  joinInt16/32             │
@@ -61,8 +61,8 @@ Two other threads meet here: the Schema 1 register map (NW-Device-Specification)
                                         │ I²C
                           DEVICE SIDE (ATtiny firmware, Schema 1 sensors only)
  ┌───────────────────────────────────────────────────────────────────────────────┐
- │ Register map   Page 0 identity (EEPROM)  │  Page 1: 0x20 status, 0x27 report,   │
- │                                          │  0x22.. data,  0x3F control (prop.)  │
+ │ Register map   Page 0 identity (EEPROM)  │  Page 2: 0x40 status, 0x47 report,   │
+ │                                          │  0x42.. data,  0x5F control (prop.)  │
  ├───────────────────────────────────────────────────────────────────────────────┤
  │ Handshake mirror – same in every firmware                                       │
  │   receiveEvent: write to REG_CTRL with bit0 → startReading = true                 │
@@ -99,7 +99,7 @@ Three invariants make this a template rather than a style guide:
 
 - **Required on every sensor library** (Andy). The caller is the reason: `collectReadings` is a template over any sensor type and can only be one if every sensor has the same three names.
 - **Taking and printing are separate acts with separate names.** `updateMeasurements(component = ALL)` takes one reading into the fields – of every chip, or of one chip alone (Andy: per-chip groups *and* the ability to read per sensor) (the existing name in Apis, Haar, T9602; it says exactly what happens to the object). `printReading(Print& out)` prints the *stored* reading, each value followed by a comma, and returns bytes written; it never acquires. *Print*, not *write*: in Arduino `Print`, `write()` emits raw bytes and `print()` emits formatted text. A shortcut `logReading(Print& out)` takes **one** reading and prints it. On a library whose `updateMeasurements()` takes N readings with statistics (Apis), `logReading` uses the single-reading chip functions (`updateRange()`, `updateOrientation()`) instead, so that each call is one acquisition regardless of the configured N – found while implementing Apis series 1, 2026-09-21. Where `updateMeasurements()` takes one reading, the two are the same. `getString()` is the same shortcut for a `String` destination and keeps its current behaviour (it acquires first) for byte-identical output in the first pass. `printHeader(Print&)` beside `getHeader()` for symmetry.
-- **Components are per-chip groups, on every library** (Andy: uniformity). Each library declares one measurement group per on-board chip (Walrus: MS5803, MCP9808; Haar: SHT31, LPS35HW; Apis: LiDAR = range, LIS3DH = orientation), plus ALL as the default. This aligns three things that were already per-chip: the status-byte fault bits, the firmware's `acquire()` steps, and the per-group reading count. On Schema 1 devices a single Page 1 read still delivers every chip; the group selects which fields are decoded, counted, and printed. If measuring one chip alone ever matters for power or time, that is a per-chip configuration bit in the control register (0x21 bits 1–7), a firmware feature, not a library one. Groups become useful where chips differ in cost or wanted count (Apis, Libelle) and cost nothing elsewhere.
+- **Components are per-chip groups, on every library** (Andy: uniformity). Each library declares one measurement group per on-board chip (Walrus: MS5803, MCP9808; Haar: SHT31, LPS35HW; Apis: LiDAR = range, LIS3DH = orientation), plus ALL as the default. This aligns three things that were already per-chip: the status-byte fault bits, the firmware's `acquire()` steps, and the per-group reading count. On Schema 1 devices a single Page 1 read still delivers every chip; the group selects which fields are decoded, counted, and printed. If measuring one chip alone ever matters for power or time, that is a per-chip configuration bit in the control register (0x41 bits 1–7), a firmware feature, not a library one. Groups become useful where chips differ in cost or wanted count (Apis, Libelle) and cost nothing elsewhere.
 - **Bracket:** `beginReadings(component)` / `endReadings()` around a run of readings – the `beginTransmission`/`endTransmission` shape. Empty in every library except where a run has one-time setup (Apis: LiDAR power once for N readings).
 - **Missing values:** `-9999` stays on the file (NOAA and earth-science convention; ten years of NW files carry it), defined once as a named constant. Apis's `-9998` "not measured" stays until a replacement exists (nothing else distinguishes not-measured from error). Float accessors may return `NAN` in C++ with the printer mapping it to the constant, since `Print` would emit lowercase `nan`, which R does not read. Column count never changes on failure.
 
@@ -145,24 +145,24 @@ Template, not base class: no vtable, no dependency on Core. Each reading reaches
 | MaxBotix | serial stream | sensor emits `R####` frames | no | frame start | next frame ≤200 ms | yes |
 | Tally (pin) | controller pin | counts edges | – | – | always current | – |
 
-**Block 0 of Page 1 – agreed 2026-09-21 and now normative in README.md (Page 1 section and all appendices). Copy kept here for context; the README governs. Supersedes the 0x3F bookend proposal below, kept for history:**
+**Block 0 of Page 2 – agreed 2026-09-21 and now normative in README.md (Page 2 section and all appendices). Copy kept here for context; the README governs. Supersedes the 0x5F bookend proposal below, kept for history:**
 
 ```
-  0x20  STATUS      live, read-only
+  0x40  STATUS      live, read-only
         bit 0    ready         1 = data registers hold a complete reading
         bits 1–6 chip fault    bit n = chip n−1 is faulted now (chip order from the appendix)
         bit 7    pan-fault     OR of bits 1–6
-  0x21  CONTROL     universal, writable; a write here also acknowledges 0x27
+  0x41  CONTROL     universal, writable; a write here also acknowledges 0x47
         bit 0    trigger       controller writes 1; device clears it when the reading starts
         bits 1–6 chip select   bit n = measure chip n−1 on the next reading; power-up = every present chip
         bit 7    sleep         device enters lowest power after this transaction; wakes on I²C address match
-  0x22  COUNTER lo  uint16 little-endian; +1 when ready is set; 0 after power-up
-  0x23  COUNTER hi
-  0x24  REQUESTED   uint16 little-endian, writable: readings the controller will trigger with the chips
-  0x25              held powered; 0 = one per trigger. Decided 2026-09-22 (#23); replaces the counter-extension reserve.
-  0x26  CONFIG      device-specific, writable, volatile; 8 bits per appendix; 0x00 = defaults
+  0x42  COUNTER lo  uint16 little-endian; +1 when ready is set; 0 after power-up
+  0x43  COUNTER hi
+  0x44  REQUESTED   uint16 little-endian, writable: readings the controller will trigger with the chips
+  0x45              held powered; 0 = one per trigger. Decided 2026-09-22 (#23); replaces the counter-extension reserve.
+  0x46  CONFIG      device-specific, writable, volatile; 8 bits per appendix; 0x00 = defaults
                     (≤6 bits needed by any current device; more → device's own data area, never Block 0)
-  0x27  REPORT      latched, read-only; the device's most recent report, fault or notice; cleared by any write to CONTROL
+  0x47  REPORT      latched, read-only; the device's most recent report, fault or notice; cleared by any write to CONTROL
         bits 7–5 chip (0–6; 7 = the unit)   bits 4–0 kind: 0 none · 1 no-ack · 2 timeout · 3 chip checksum
         4 out of range · 5 not initialised · 6 reset since last CONTROL write · 7 config rejected
         8 supply fault · 9 calibration stored (notice) · 10 batch abandoned (notice) · 11–15 reserved universal · 16–31 device-specific
@@ -172,7 +172,7 @@ Library surface implied: `ready()`, `newReading()`, `requestReading(component)` 
 
 **Original bookend proposal (superseded):**
 - Universal **control register at Page 1 last byte, 0x3F** (mirroring the address register at 0x1F ending Page 0). Bit 0 = trigger, written by controller, self-clearing. Bits 1–7 = device-specific configuration (absorbs Walrus/Libelle update-rate bits and Apis sensitivity bits into a fixed position).
-- **Ready (0x20 bit 0)** = set by the device when the data registers hold a complete measurement; cleared by the device the moment a measurement begins. A trigger therefore clears ready and the controller waits for it to return.
+- **Ready (0x40 bit 0)** = set by the device when the data registers hold a complete measurement; cleared by the device the moment a measurement begins. A trigger therefore clears ready and the controller waits for it to return.
 - **Free-running stays legal** as an option a device may add (Libelle's 800 ms auto-range is the one candidate), not a pattern of its own. Note: a device timer is a second clock that can only be out of phase with the logger's, and spends power on unread readings.
 - Counters (Tally): same handshake; a trigger means *latch*, not latch-and-clear. The data field is a monotonic `uint32` event count since power-up (wraps); the controller keeps the last value it logged and takes the difference, so a failed read loses nothing. 32 bits because Tally also fronts anemometers (100 pulses/s wraps 16 bits in 11 min). Tally should stay powered between logging events (it has its own supercapacitor).
 - **Reading counter vs event count.** The Block 0 reading counter counts *measurements* (one per latch on Tally, one per conversion elsewhere). The event count is Tally's *data*. They are never conflated.
@@ -271,7 +271,7 @@ Walrus and Haar should copy this shape; what is identical across the three becom
 ## 10. Deferred
 
 - **Sleep bit firmware implementation (TWI address-match wake).** The bit is defined in the spec (Page 1 control byte, bit 7) and stays. Implementing it in firmware depends on the ATtiny1634 TWI slave waking the part from power-down on address match; to be implemented and bench-tested later, not in Apis series 2 (Andy, 2026-09-21).
-- **How Apis runs** – RESOLVED 2026-09-22 (Project-Apis #23, spec Apis appendix): on-demand only; LiDAR powered per the readings-requested word (0x24–0x25); readiness by polling the LiDAR's STATUS register (health flag after power-up, busy bit after a command) instead of fixed delays; the mode pin is out of the reading path; Serial only in debug builds. General rule for any chip: single reading = full power-up/init/acquire/power-down cycle; batch = power-up and init once under a requested count, acquire N times, power down when the count is done; the device keeps no idle timer; a batch that never completes is abandoned with a latched fault. Per-chip numbers belong in the appendix (Apis: power-up ≈ 22 ms boot after a ~15–20 ms rail ramp; init 4 writes; acquisition ≈ 1 ms at a good target; 65 mA idle / 85 mA acquiring).
+- **How Apis runs** – RESOLVED 2026-09-22 (Project-Apis #23, spec Apis appendix): on-demand only; LiDAR powered per the readings-requested word (0x44–0x45); readiness by polling the LiDAR's STATUS register (health flag after power-up, busy bit after a command) instead of fixed delays; the mode pin is out of the reading path; Serial only in debug builds. General rule for any chip: single reading = full power-up/init/acquire/power-down cycle; batch = power-up and init once under a requested count, acquire N times, power down when the count is done; the device keeps no idle timer; a batch that never completes is abandoned with a latched fault. Per-chip numbers belong in the appendix (Apis: power-up ≈ 22 ms boot after a ~15–20 ms rail ramp; init 4 writes; acquisition ≈ 1 ms at a good target; 65 mA idle / 85 mA acquiring).
 - **Series 3 `begin()` gates:** schema byte 0x01, name, and firmware patch ≥ `APIS_FW_MIN_PATCH`; plus `getHardwareVersion()` / `getFirmwareVersion()` so a sketch can report why `begin()` refused (Andy, 2026-09-21).
 
 - `NorthernWidget_Core` and the `NorthernWidget` bundle library: after Walrus + Haar (+ one more) are converted; contents = whatever is identical across them.
@@ -288,7 +288,7 @@ Walrus and Haar should copy this shape; what is identical across the three becom
 | Moves to Core: device layer, class `NW_Device` (spec-defined, identical for every Schema 1 device) | Apis lines |
 |---|---|
 | `begin(address, name, minPatch)`: ACK, read Page 0 0x00–0x0F, gates on schema 0x01, name, patch; `hardwareMajor()/hardwareMinor()/firmwareVersion()` | 33 |
-| bus primitives `readBytes`, `writeByte`, `writeRequest` (0x24–0x25) | 19 |
+| bus primitives `readBytes`, `writeByte`, `writeRequest` (0x44–0x45) | 19 |
 | `setI2CAddress` (0x1F) | 3 |
 | handshake: `ready()`, `readCounter()`, `newReading()`, `requestReading(mask)`, `takeReading(mask)` with status/fault capture and the per-reading wait ceiling | 37 |
 | reports and faults: `faulted(chip)`, `anyFault()`, `reportChip()`, `reportKind()`, `printReport(Print&, chipNames)` with the universal kind-name table | 20 |
