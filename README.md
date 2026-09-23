@@ -107,12 +107,12 @@ Pages are 32-byte aligned:
 | Page 0 | 0x00–0x1F   | Identity (this document)  | Persistent (EEPROM or equivalent) |
 | Page 1 | 0x20–0x3F   | Calibration               | Persistent (EEPROM or equivalent) |
 | Page 2 | 0x40–0x5F   | Sensor data: Block 0 (status and control), then data | SRAM (runtime) |
-| Page 3 | 0x60–0x7F   | Sensor data, continued (devices with more than 24 bytes of data) | SRAM (runtime) |
-| Pages 4–7 | 0x80–0xFF | Sensor data, continued, or future use | SRAM (runtime) |
+| Pages 3–5 | 0x60–0xBF | Sensor data, continued (devices with more than 24 bytes of data): up to 120 data bytes in all | SRAM (runtime) |
+| Pages 6–7 | 0xC0–0xFF | Reserved, universal: undefined until a need has a device (2026-09-23) | – |
 
 One rule fixes the backing store: **0x00–0x3F is stored, 0x40 and above is served.** The stored half is a single 64-byte image, byte for byte the top 64 bytes of the device's EEPROM in the same order (see [Physical EEPROM layout](#physical-eeprom-layout)); the served half is the firmware's register array in SRAM, rewritten at every reading and gone at power-off. The schema byte (Page 0, address 0x00) declares which pages a device exposes.
 
-> Renumbered on 2026-09-23, before any release: calibration moved from Page 2 to Page 1 and sensor data from Pages 1 and 3 to Pages 2 and 3, so that the stored pages are contiguous on the bus as they are in EEPROM, and data continues upward without a gap. Nothing provisioned or deployed carried the earlier numbering; the schema byte stays 0x01.
+> Renumbered on 2026-09-23, before any release: calibration moved from Page 2 to Page 1 and sensor data from Pages 1 and 3 to Pages 2 and 3, so that the stored pages are contiguous on the bus as they are in EEPROM, and data continues upward without a gap. Data owns Pages 2–5, 120 bytes, four times the largest device on the list (Libelle with a bridged accelerometer, 28 bytes); a device that outgrows them is a case for a two-byte register pointer in a later schema, not for the last two pages, which stay reserved for whatever universal need first has a device. Nothing provisioned or deployed carried the earlier numbering; the schema byte stays 0x01.
 
 ---
 
