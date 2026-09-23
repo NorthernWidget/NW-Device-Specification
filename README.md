@@ -625,6 +625,45 @@ Page 1 layout TBD. Liasis does not currently have an onboard MCU: it communicate
 
 ---
 
+### Tally (event counter) – proposed 2026-09-23, not yet decided
+
+Tally counts pulses from a reed switch, a tipping-bucket gauge or an anemometer on its own supercapacitor, so it keeps counting while the logger sleeps. Its ATtiny841 reads a 16-bit hardware counter (LOAD, CLK, DATA pins), clears it, and adds the ticks to a running total that it serves over I²C. The controller latches that total and takes the difference from the total it logged last time, so a failed read loses nothing and no clear command exists on the bus.
+
+#### Page 0
+
+```
+Block 0:  Schema=0x01, Name='T','a','l','l','y',0x00,0x00
+Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=[mfr], 0x00,0x00,0x00, Reserved
+Block 2:  Board type=0x5401 ('T'=0x54, rev 1), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
+Block 3:  Reserved, Magic=0x4E, CRC=[computed], I2C address=0x54
+```
+
+#### Page 1 (0x20–0x3F): Counter data
+
+Chip table:
+
+| Index | Chip | Measurements |
+|-------|------|--------------|
+| 0 | Counter logic (16-bit hardware counter behind LOAD/CLK/DATA) | event count |
+| 1 | ATtiny841 ADC (the unit's own) | supercapacitor voltage |
+
+Block 0 (0x20–0x27) is the universal block. A trigger *latches*: the firmware reads and clears the hardware counter, adds the ticks to the running total, writes the total, and increments the reading counter. Config (0x26): bit 0 = capacitor disconnected from the charger (the legacy NOCAP command; 0 = charging, the power-on state); bits 7:1 reserved. There is no free-running cycle: the hardware counts continuously, and the firmware sleeps between transactions.
+
+```
+Block 1 (0x28–0x2F)   Counter
+  0x28–0x2B   Event count, uint32, little-endian: ticks since power-up (wraps at 2^32)
+  0x2C–0x2D   Supercapacitor voltage, uint16, raw ADC counts (× 3.3 / 1024 → V), read at each latch
+  0x2E–0x2F   Reserved
+
+Blocks 2–3 (0x30–0x3F)   Reserved
+```
+
+No Page 2.
+
+Faults: chip 0 kind 4 (out of range) if the hardware counter reads all ones at a latch, which the logic cannot produce in one logging interval; unit kinds 6 and 3 at boot as for every device.
+
+> **What changes from firmware 0.2.0 (2019):** the five-byte map at 0x00 (command bits at 0x00: SAMPLE, CLEAR, RESET, PEEK, SLEEP, GET_VOLTAGE, NOCAP; ticks at 0x01–0x02; capacitor voltage at 0x03–0x04) becomes Schema 1. SAMPLE is the Block 0 trigger; PEEK is the only behaviour (the count is monotonic, so every read is a peek); CLEAR and RESET disappear from the bus (the controller differences totals); SLEEP is Control bit 7; GET_VOLTAGE is folded into the latch; NOCAP is Config bit 0. The address moves from the hard-coded 0x33 to 0x54 ('T'), with Page 0 byte 0x1F overriding it. The 16-bit hardware counter still wraps at 65 536 ticks between latches (an anemometer at 100 pulses/s wraps in 11 minutes), so the firmware must be latched, by the controller or by its own timer, more often than that; a device-side latch timer is the open question.
+
 ### Okapi (data logger with solar charging and telemetry)
 
 Okapi is an I²C controller that communicates with a Particle Boron telemetry board via UART, and it has no current peripheral interface. Schema 1 formalizes its EEPROM serial number as Page 0 and reserves a hypothetical Page 1 for status reporting to the Boron or any higher-level device. The UART transport requires a framing layer (Magic Preamble or COBS, see [Transport](#transport)).
@@ -777,7 +816,7 @@ The registry above lists NW devices. A sensor shares the bus with the logger's o
 | `0x4C` | Libelle UP | | |
 | `0x4D` | Margay (reserved, hypothetical) | | |
 | `0x4F` | Okapi (reserved, hypothetical) | | |
-| `0x50`–`0x57` | **Walrus `0x57`**; Apis legacy `0x50` | **Okapi: MB85RC FRAM (`0x50`–`0x57`, by strapping)** | |
+| `0x50`–`0x57` | **Walrus `0x57`**; **Tally `0x54`** (proposed); Apis legacy `0x50` | **Okapi: MB85RC FRAM (`0x50`–`0x57`, by strapping)** | |
 | `0x62` | | Okapi: MCP4725 DAC | |
 | `0x68` | | Margay, Okapi: DS3231 RTC | |
 | `0x69`–`0x6B` | | Margay: MCP3421 ADC (by model) | |
