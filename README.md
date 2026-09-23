@@ -851,7 +851,7 @@ Tracks whether each device's library/firmware and hardware have been updated for
 
 | Device | Library / firmware | Hardware | Integration check | Physical test |
 |--------|--------------------|----------|-------------------|---------------|
-| Apis | ✅ firmware patch 2 and library on NW_Core (master, unreleased) | – | ✅ 2026-09-23 (host harness) | – |
+| Apis | ✅ firmware patch 3 and library on NW_Core (master, unreleased) | – | ✅ 2026-09-23 (host harness) | – |
 | Haar | ✅ firmware patch 1 and library on NW_Core (master, unreleased) | – | ✅ 2026-09-23 (host harness) | – |
 | Walrus | ✅ firmware patch 1 and library on NW_Core (master, unreleased) | – | ✅ 2026-09-23 (host harness) | – |
 | Libelle | ✅ firmware patch 1 and library on NW_Core (master, unreleased) | – | ✅ 2026-09-23 (host harness) | – |
