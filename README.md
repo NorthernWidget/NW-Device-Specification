@@ -25,10 +25,10 @@ Offset  Field       Size  Notes
   6     FirmwareID  2 B   Always written as 0x0000; reserved
 ```
 
-A programmer or setup jig reads this block – it is not exposed over I2C. It is a manufacturing-time convention, not a bus-communication protocol. Its significance here is twofold:
+A programmer or setup jig reads this block; it is not exposed over I2C. It is a manufacturing-time convention, not a bus-communication protocol. Its significance here is twofold:
 
 1. It established the serial number vocabulary (board type / group / unique ID) that Schema 1 inherits.
-2. The `FirmwareID` field, always `0x0000`, means that every Margay ever programmed already carries `Schema = 0x00` in that slot – an accidental deployment of schema numbering before the concept was formalized.
+2. The `FirmwareID` field, always `0x0000`, means that every Margay ever programmed already carries `Schema = 0x00` in that slot: an accidental deployment of schema numbering before the concept was formalized.
 
 Schema 0 is a Margay-only artifact. Sensors produced before Schema 1 typically have blank EEPROM (`0xFF`) and no structured identity block.
 
@@ -179,9 +179,9 @@ Your controller performs a register-addressed read: write the starting address (
 
 UART has no inherent framing: a bare address byte will be misinterpreted if the line carries other traffic. You therefore need a framing layer. Two options are supported:
 
-**COBS (Consistent Overhead Byte Stuffing)** – a formal standard that encodes data such that `0x00` never appears in the payload, which makes `0x00` an unambiguous frame boundary. Arduino libraries are available. It is recommended when interoperability or formal correctness matters.
+**COBS (Consistent Overhead Byte Stuffing)**: a formal standard that encodes data such that `0x00` never appears in the payload, which makes `0x00` an unambiguous frame boundary. Arduino libraries are available. It is recommended when interoperability or formal correctness matters.
 
-**Magic Preamble** – a two-byte sync sequence (`0xAA 0x55`) that cannot appear in normal ASCII traffic, followed by a page-address byte. It is simple to implement by hand.
+**Magic Preamble**: a two-byte sync sequence (`0xAA 0x55`) that cannot appear in normal ASCII traffic, followed by a page-address byte. It is simple to implement by hand.
 
 Magic Preamble frame format:
 
@@ -214,11 +214,11 @@ The schema byte at 0x00 is the first thing your controller reads. Its decision t
 | Value | Meaning | Action |
 |-------|---------|--------|
 | `0x01` | Schema 1 (this document) | Parse Pages 0–N per spec |
-| `0x00` | Schema 0 – Margay legacy SN convention | Not I²C auto-detectable; skip |
+| `0x00` | Schema 0: Margay legacy SN convention | Not I²C auto-detectable; skip |
 | `0xFF` | Unprogrammed EEPROM | Not auto-detectable; skip |
 | `0x02`–`0xFE` | Future or unknown schema | Skip, or parse if the controller knows that version |
 
-**`0x00` and `0xFF` are permanently reserved and will never be assigned to a valid schema.** `0x00` is the erased-then-overwritten default of the Margay serial number block (Schema 0), and `0xFF` is the hardware default of blank EEPROM. Both are unambiguously "not auto-detectable" – your controller need not distinguish between them. Valid schemas therefore occupy `0x01`–`0xFE`: 254 values, sufficient for any conceivable rate of fundamental protocol change.
+**`0x00` and `0xFF` are permanently reserved and will never be assigned to a valid schema.** `0x00` is the erased-then-overwritten default of the Margay serial number block (Schema 0), and `0xFF` is the hardware default of blank EEPROM. Both are unambiguously "not auto-detectable"; your controller need not distinguish between them. Valid schemas therefore occupy `0x01`–`0xFE`: 254 values, sufficient for any conceivable rate of fundamental protocol change.
 
 The 7-byte name field accommodates all current Northern Widget device names without truncation. A fixed-position name at a fixed address gives negligible collision probability with non-compliant devices, and no manufacturer prefix is required. Write reserved bytes as `0x00` at manufacture. `0xFF` indicates unprogrammed EEPROM.
 
@@ -372,12 +372,12 @@ The appendices define these per device. Values are little-endian, in the types a
 
 The design took the following existing standards into account:
 
-- **IEEE 1451 / TEDS** – the closest philosophical precedent: smart-transducer self-identification, an EEPROM-resident identity block, and media independence. This specification differs in three ways: it is open and unencumbered (IEEE 1451 is paywalled), it uses a flat byte map rather than bit-packed templates, and it co-locates runtime data with identity rather than separating them entirely.
-- **I2C Device ID** (reserved address 0xF8) – the closest base-I2C primitive: a 3-byte identifier (12-bit manufacturer / 9-bit part / 3-bit revision). This specification extends that concept to a full identity page.
-- **SMBus ARP and UDID** – bus-native device discovery and dynamic address assignment, analogous to the writable address register at 0x1F. They are widely considered heavyweight, and this specification offers a lighter scan-and-read alternative.
-- **IPMI FRU** – structural reference for area-based versioning and extensibility. This specification borrows the extensibility philosophy (schema versioning allows old controllers to skip unknown pages) but rejects FRU's variable-length offset-chained block structure in favour of fixed-position fields.
-- **JEDEC SPD** – fixed-byte-map-in-EEPROM-over-SMBus, the closest historical precedent for Page 0.
-- **Adafruit STEMMA QT / SparkFun Qwiic** – these ecosystems standardised I2C connectors and voltage levels but not device identity or discovery. Devices in these ecosystems rely on fixed I2C address, chip-specific WHO_AM_I registers, and human-maintained conflict lists for identification. This specification provides the missing auto-discovery layer.
+- **IEEE 1451 / TEDS** is the closest philosophical precedent: smart-transducer self-identification, an EEPROM-resident identity block, and media independence. This specification differs in three ways: it is open and unencumbered (IEEE 1451 is paywalled), it uses a flat byte map rather than bit-packed templates, and it co-locates runtime data with identity rather than separating them entirely.
+- **I2C Device ID** (reserved address 0xF8) is the closest base-I2C primitive: a 3-byte identifier (12-bit manufacturer / 9-bit part / 3-bit revision). This specification extends that concept to a full identity page.
+- **SMBus ARP and UDID** provide bus-native device discovery and dynamic address assignment, analogous to the writable address register at 0x1F. They are widely considered heavyweight, and this specification offers a lighter scan-and-read alternative.
+- **IPMI FRU** is the structural reference for area-based versioning and extensibility. This specification borrows the extensibility philosophy (schema versioning allows old controllers to skip unknown pages) but rejects FRU's variable-length offset-chained block structure in favour of fixed-position fields.
+- **JEDEC SPD**, a fixed byte map in EEPROM over SMBus, is the closest historical precedent for Page 0.
+- **Adafruit STEMMA QT / SparkFun Qwiic**: these ecosystems standardised I2C connectors and voltage levels but not device identity or discovery. Devices in these ecosystems rely on fixed I2C address, chip-specific WHO_AM_I registers, and human-maintained conflict lists for identification. This specification provides the missing auto-discovery layer.
 
 ---
 
@@ -461,12 +461,12 @@ Chip table:
 Block 0 (0x20–0x27) is the universal block. Config (0x26): no bits defined. Write 0x00.
 
 ```
-Block 1 (0x28–0x2F)   SHT31: temperature + humidity
+Block 1 (0x28–0x2F)   SHT31: temperature and humidity
   0x28–0x29   Temp SHT31, int16, 0.01 °C, little-endian
   0x2A–0x2B   Humidity, uint16, 0.01 % RH, little-endian
   0x2C–0x2F   Reserved
 
-Block 2 (0x30–0x37)   LPS35HW: pressure + temperature
+Block 2 (0x30–0x37)   LPS35HW: pressure and temperature
   0x30–0x33   Pressure, uint32, 0.01 hPa, little-endian
   0x34–0x35   Temp LPS35HW, int16, 0.01 °C, little-endian
   0x36–0x37   Reserved
@@ -478,7 +478,7 @@ Block 3 (0x38–0x3F)   Reserved
 
 No Page 2. Both sensors are factory-calibrated. There is no user calibration step.
 
-> **I²C address note:** `0x48` (`'H'`) is also a common address for the ADS1115 ADC. There is no conflict among NW devices. If your system independently uses an ADS1115 on the same bus, configure the ADS1115 to a different address (ADDR pin to GND = `0x48`, VDD = `0x49`, SDA = `0x4A`, SCL = `0x4B` – avoid `0x48`).
+> **I²C address note:** `0x48` (`'H'`) is also a common address for the ADS1115 ADC. There is no conflict among NW devices. If your system independently uses an ADS1115 on the same bus, configure the ADS1115 to a different address (ADDR pin to GND = `0x48`, VDD = `0x49`, SDA = `0x4A`, SCL = `0x4B`; avoid `0x48`).
 
 **LPS35HW pressure sensor characteristics:**
 
@@ -490,7 +490,7 @@ No Page 2. Both sensors are factory-calibrated. There is no user calibration ste
 | Stored range | 26,000–126,000 |
 | Effective noise floor | ~0.002 hPa RMS @ 1 Hz |
 
-Unit rationale: 0.01 hPa is the natural meteorological unit, and it aligns with the LPS35HW's native hPa output. The Walrus pressure register uses µBar (see below). The difference is intentional – each unit matches its sensor's native output format.
+Unit rationale: 0.01 hPa is the natural meteorological unit, and it aligns with the LPS35HW's native hPa output. The Walrus pressure register uses µBar (see below). The difference is intentional: each unit matches its sensor's native output format.
 
 ---
 
@@ -517,7 +517,7 @@ Chip table:
 Block 0 (0x20–0x27) is the universal block. Config (0x26): bits 1:0 = free-running update period, 0 = 5 s, 1 = 10 s, 2 = 60 s, 3 = 300 s (as the former control register 0x00); bits 7:2 reserved.
 
 ```
-Block 1 (0x28–0x2F)   MS5803: pressure + temperature
+Block 1 (0x28–0x2F)   MS5803: pressure and temperature
   0x28–0x2B   Pressure, int32, µBar, little-endian
   0x2C–0x2D   Temp MS5803, int16, 0.01 °C, little-endian
   0x2E–0x2F   Reserved
@@ -544,7 +544,7 @@ No Page 2. MS5803 calibration coefficients are read from its internal PROM at st
 
 All variants fit within int32 (~2.1 billion µBar max). The -01BA installed in a Walrus makes it a high-resolution barometer. Installed -02BA/-05BA variants measure water column depth (1 mbar ≈ 1 cm water).
 
-Unit rationale: µBar is the MS5803 library's internal `_pressure_actual` unit, and it requires no conversion in firmware. The Haar pressure register uses 0.01 hPa. The difference is intentional – each unit matches its sensor's native output format.
+Unit rationale: µBar is the MS5803 library's internal `_pressure_actual` unit, and it requires no conversion in firmware. The Haar pressure register uses 0.01 hPa. The difference is intentional: each unit matches its sensor's native output format.
 
 ---
 
@@ -584,7 +584,7 @@ Block 2 (0x30–0x37)   VEML6075: UV
   0x30–0x33   UVA, int32, compensated counts, little-endian
   0x34–0x37   UVB, int32, compensated counts, little-endian
 
-Block 3 (0x38–0x3F)   ADS1115: IR + temperature
+Block 3 (0x38–0x3F)   ADS1115: IR and temperature
   0x38–0x39   IR Short, uint16, raw ADC counts (×1.25e-4 → V)
   0x3A–0x3B   IR Mid, uint16, raw ADC counts (×1.25e-4 → V)
   0x3C–0x3D   Temperature, uint16, raw ADC counts (Steinhart-Hart → °C)
@@ -640,7 +640,7 @@ Block 3:  Reserved, Magic=0x4E, CRC=[computed], Peripheral address=0x00 (unassig
 
 Pre-production prototype units ("Resnik") carry board type `0x9950` and are not field-upgradeable to Schema 1.
 
-#### Page 1 (0x20–0x3F): Logger status – HYPOTHETICAL
+#### Page 1 (0x20–0x3F): Logger status (hypothetical)
 
 Subsystem table (a logger's "chips" are its subsystems, with the same index rules):
 
@@ -686,7 +686,7 @@ No Page 2. Calibration constants are hardcoded in the library.
 
 ### Margay (data logger)
 
-Margay is an I²C controller, not a peripheral – it queries sensors on the bus rather than responding to queries itself. Schema 1 formalizes its existing EEPROM serial number as Page 0, and defines a hypothetical Page 1 for the case where Margay ever acts as an I²C peripheral of a higher-level device (e.g., a cellular gateway or satellite modem). **Page 1 is not implemented. It is reserved for future use.**
+Margay is an I²C controller, not a peripheral; it queries sensors on the bus rather than responding to queries itself. Schema 1 formalizes its existing EEPROM serial number as Page 0, and defines a hypothetical Page 1 for the case where Margay ever acts as an I²C peripheral of a higher-level device (e.g., a cellular gateway or satellite modem). **Page 1 is not implemented. It is reserved for future use.**
 
 #### Page 0
 
@@ -699,7 +699,7 @@ Block 3:  Reserved, Magic=0x4E, CRC=[computed], I²C address=0x00 (unassigned)
 
 Block 2 keeps the format of the existing 8-byte Schema 0 EEPROM serial number (board type, group ID, unique ID, FirmwareID) with no data loss, but not its location: Schema 0 wrote those 8 bytes at the very end of EEPROM, which under Schema 1 is Block 3 (reserved, magic, CRC, address), while Block 2 sits 8 bytes earlier at Page 0 offset 0x10–0x17. A logger library that reads its serial number from the last 8 bytes therefore reads Block 3 once the board is provisioned. Your library must instead read Page 0 (schema byte 0x01, magic, CRC) and take the serial number from Block 2, falling back to the old location when the schema byte is not 0x01. The board type encoding (`'M'` = 0x4D high byte, revision index low byte) already followed the Schema 1 convention before the spec was written.
 
-#### Page 1 (0x20–0x3F): Logger status – HYPOTHETICAL
+#### Page 1 (0x20–0x3F): Logger status (hypothetical)
 
 If Margay ever gains an I²C peripheral interface, `0x4D` (ASCII `'M'`) is the natural address. The layout below exposes the data a higher-level device would most need: current time, battery state, onboard environment, and logger status. Its subsystem table follows the same index rules as a sensor's chip table:
 
@@ -752,12 +752,12 @@ Controller-only devices (Margay, Okapi) have no current peripheral address, and 
 | Device | Type | Current address(es) | Proposed (Schema 1) | Mnemonic | Notes |
 |--------|------|---------------------|---------------------|----------|-------|
 | Apis | Peripheral | `0x50` (primary) | `0x41` | `'A'` | Legacy board type `0x6C00`; Schema 1 board type `0x4100` |
-| Liasis | Peripheral | – | TBD | `'l'` | `0x6C00` reserved (legacy Apis); Schema 1 board type `0x6C01`; lowercase initial – secondary address scheme does not apply |
+| Liasis | Peripheral | – | TBD | `'l'` | `0x6C00` reserved (legacy Apis); Schema 1 board type `0x6C01`; lowercase initial; the secondary address scheme does not apply |
 | Haar | Peripheral | `0x42` (primary) | `0x48` | `'H'` | `0x48` is common for ADS1115; no NW-device conflict |
 | Libelle | Peripheral | `0x40` UP, `0x41` DOWN | `0x4C` UP, `0x0C` DOWN | `'L'` / FF | Hardware solder jumper JP1; DOWN = `'L'` XOR `0x40` = `0x0C` (ASCII Form Feed) |
 | Margay | Controller (hypothetical) | – | `0x4D` | `'M'` | **Reserved.** Controller only; no peripheral interface yet |
 | Okapi | Controller (hypothetical) | – | `0x4F` | `'O'` | **Reserved.** Controller only; no peripheral interface yet |
-| Walrus | Peripheral | `0x4D` primary, `0x41` alt | `0x57` | `'W'` | ⚠ Current `0x4D` must change – clashes with proposed Margay; address is software-configurable via EEPROM |
+| Walrus | Peripheral | `0x4D` primary, `0x41` alt | `0x57` | `'W'` | ⚠ Current `0x4D` must change; this clashes with the proposed Margay design. The address is software-configurable via EEPROM |
 
 ### Bus occupancy
 
@@ -797,7 +797,7 @@ The registry above lists NW devices. A sensor shares the bus with the logger's o
 
 ## Controller-side library design
 
-[LIBRARY-DESIGN.md](LIBRARY-DESIGN.md) describes how a controller's Arduino library reads a Schema 1 device – the layered library shape, the one-sample raw-reading primitive, the proposed universal control register, and the naming conventions. Its handshake proposal is now the Page 1 Block 0 definition above. The rest is the library-side design and its work plan.
+[LIBRARY-DESIGN.md](LIBRARY-DESIGN.md) describes how a controller's Arduino library reads a Schema 1 device: the layered library shape, the one-sample raw-reading primitive, the proposed universal control register, and the naming conventions. Its handshake proposal is now the Page 1 Block 0 definition above. The rest is the library-side design and its work plan.
 
 ---
 
