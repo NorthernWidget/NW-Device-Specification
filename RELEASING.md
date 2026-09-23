@@ -73,6 +73,7 @@ Controllers (Margay, Okapi) are not sensors and do not implement the sensor regi
 ## Code conventions
 
 - `begin()` returns `bool`; checks I²C ACK; stubs return `false`
+- **Formatting: the Arduino IDE's auto-format** (its `.clang-format`: 2-space indent, opening brace on the same line and `else` on the closing-brace line, no hard column limit, indented `case` labels, two spaces before a trailing comment). Keep lines under about 80 columns where practical. New code in an existing file matches that file; a change never reformats lines it does not touch; the authors' comment forms (`//Comment`, `//DEBUG!`, `//FIX!`) and epigraph file headers stay. Minimum reasonable change is the rule.
 - No build artifacts committed (no generated `_site/` or Doxygen `xml/`, no downloaded binaries; `_docs/` is site *configuration* and is required)
 - DOI badge uses concept DOI (permanent, not per-version)
 
