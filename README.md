@@ -321,26 +321,29 @@ Address  Field         Access      Contents
                                    0x00 = the device's defaults. Volatile: the controller sets it
                                    after every power-up. A device needing more than 8 bits of
                                    configuration places the rest in its own data area, never here.
-  0x27   Fault         read-only   Latched code for the most recent fault; 0x00 = none.
-                       (latched)   bits 7–5 chip index (0–6), or 7 = the unit itself
+  0x27   Report        read-only   Latched code for the device's most recent report, good or
+                       (latched)   bad, held until the controller acknowledges it; 0x00 = none.
+                                   bits 7–5 chip index (0–6), or 7 = the unit itself
                                    bits 4–0 kind (table below)
 ```
 
-**Fault kinds** (bits 4–0 of 0x27):
+**Report kinds** (bits 4–0 of 0x27). A report is a *fault* when the device also sets the chip's Status bit for that reading (the data are not to be trusted); a report that sets no Status bit is a *notice*, news the controller should record but the data stand.
 
 | Kind | Meaning |
 |------|---------|
-| 0 | No fault |
+| 0 | No report |
 | 1 | Chip did not acknowledge on its bus |
 | 2 | Conversion timeout |
 | 3 | Checksum or CRC failure reported by the chip |
 | 4 | Value outside the chip's valid range |
 | 5 | Chip not initialised or failed self-test |
-| 6 | Device reset since the controller last wrote Control (configuration lost) |
+| 6 | Device reset since the controller last wrote Control (configuration lost); a notice |
 | 7 | Configuration write rejected |
 | 8 | Supply or power-good fault |
-| 9–15 | Reserved, universal |
-| 16–31 | Device-specific, defined in the appendix |
+| 9 | Calibration stored (the device wrote Page 2; a notice) |
+| 10 | Batch abandoned: the controller stopped triggering and the device powered its chips down (a notice) |
+| 11–15 | Reserved, universal |
+| 16–31 | Device-specific, defined in the appendix, which says whether each is a fault or a notice |
 
 **Rules**
 
@@ -350,15 +353,16 @@ Address  Field         Access      Contents
 - **Atomic rewrite.** The device rewrites the data registers and increments the counter with interrupts disabled, and a page read therefore never straddles a rewrite.
 - **Trigger.** A trigger written while a reading is in progress stays set, and the device honours it when the current reading completes. A trigger written while ready is set starts a new reading and clears ready: the controller never confuses the previous reading with the one it requested. A device may also start readings on its own schedule, and the trigger then adds one immediate reading without changing that schedule.
 - **Chip count.** Block 0 addresses up to six chip groups: six select bits, six fault bits, and a three-bit chip field with 7 meaning the unit. Chips that are always read together share an index. If your device has more than six independently selectable groups, define a second select byte and a second fault byte in its own data area and describe them in its appendix. Block 0 covers the first six and never changes.
-- **Live versus latched.** Status bits 1–6 show which chips are faulted *now* and clear when the chip next succeeds. The fault byte at 0x27 holds the most recent fault until the controller acknowledges it, which keeps a fault that cleared itself between readings visible. Any write to Control acknowledges: it clears 0x27 to 0x00. If your controller triggers readings, it therefore acknowledges on every request. If it only reads a free-running device, it acknowledges whenever it sets chip select or sleep.
+- **Faults and reports.** Status bits 1–6 show which chips are faulted *now* and clear when the chip next succeeds. The Report register at 0x27 holds the device's most recent report until the controller acknowledges it, which keeps a fault that cleared itself between readings visible and carries notices that no live bit could. Any write to Control acknowledges: it clears 0x27 to 0x00. If your controller triggers readings, it therefore acknowledges on every request. If it only reads a free-running device, it acknowledges whenever it sets chip select or sleep. Your controller reads Block 0 once before its first write, so that the reports the device made at boot (a reset, an invalid Page 0) reach it before the first acknowledgement.
+- **One report at a time.** The register holds one code. A fault overwrites a notice; a notice never overwrites an unacknowledged fault, and the device repeats the notice at its next reading if it still applies. Whatever a notice announces (a stored calibration, an abandoned batch) is also visible in the device's data or Page 2, so a lost notice loses nothing but the moment.
 - **Sleep.** After a transaction that sets bit 7, the device completes the transaction, then enters its lowest-power state. The ATtiny TWI slave wakes on address match, and no timer is needed, but the first transaction after waking may see a delayed acknowledge.
-- **Power-up state.** Status 0x00 (not ready), Control with every present chip selected, counter 0, Config 0x00, Fault 0x00 unless initialisation itself failed.
+- **Power-up state.** Status 0x00 (not ready), Control with every present chip selected, counter 0, Config 0x00, Report 0xE6 (the unit reset since the controller last configured it), or 0xE3 if Page 0 failed its check.
 
-Your controller reads all 32 bytes of Page 1 in one transaction, checks ready first, then the pan-fault bit, and only then uses the data. Bit 7 gives a fault summary without your controller knowing the device's chip assignments. 0x27 gives the detail when it wants it.
+Your controller reads all 32 bytes of Page 1 in one transaction, checks ready first, then the pan-fault bit, and only then uses the data. Bit 7 gives a fault summary without your controller knowing the device's chip assignments. The Report register gives the detail, and the news, when it wants them.
 
 ### Blocks 1–3 (0x28–0x3F): Device data
 
-The appendices define these per device. Values are little-endian, in the types and scaled units the appendix states. Each appendix also provides a numbered **chip table**, which fixes the index used by the status fault bits, the control chip-select bits, and the fault byte.
+The appendices define these per device. Values are little-endian, in the types and scaled units the appendix states. Each appendix also provides a numbered **chip table**, which fixes the index used by the status fault bits, the control chip-select bits, and the Report register.
 
 ---
 
@@ -398,7 +402,7 @@ Legacy deployed units carry board type `0x6C00` and I²C address `0x50` (pre-Sch
 
 #### Page 1 (0x20–0x3F): Sensor data
 
-Chip table (index used by status bits 1–6, control chip-select bits 1–6, and the fault byte):
+Chip table (index used by status bits 1–6, control chip-select bits 1–6, and the Report register):
 
 | Index | Chip | Measurements |
 |-------|------|--------------|
