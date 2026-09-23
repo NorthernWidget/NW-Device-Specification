@@ -310,7 +310,7 @@ Walrus and Haar should copy this shape; what is identical across the three becom
 
 **Firmware side:** a separate library later (WireS/ATtiny), same idea, not part of this extraction.
 
-**Steps, one commit each, harness after every one.**
+**Steps, one commit each, harness after every one.** *Status 2026-09-23: steps 0–5 done (Apis, Walrus and Haar on Core, each harness byte-identical); the candidates scan of the same day moved the harness support, the fault text, the per-group configuration, the sentinel scaling and the N-readings loop into Core as well (11a.7 revised). Next: Libelle, T9602, Tally.*
 0. Create `NW_Core`: LICENSE (GPL-3.0), library.properties, `src/NW_Core.h` (includes the two below), `src/NW_Device.h/.cpp`, `src/NW_Readings.h` (template, header-only), README, keywords, CITATION/.zenodo, docs.yml + .doxybook, `extras/test/` with the shared stubs and Core's own harness (device layer against the stub firmware; readings template against fixed inputs).
 1. `NW_Readings` written from Apis's array code; Apis adopts it for range, pitch, roll. Harness identical.
 2. `NW_Device` written from Apis's device-layer functions; Apis holds `NW_Device _dev` and forwards `begin`, versions, handshake, faults. Harness identical; transaction count identical.
