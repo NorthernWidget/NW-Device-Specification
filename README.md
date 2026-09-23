@@ -242,6 +242,8 @@ Address  Field        Size  Contents
   0x16   FirmwareID   2 B   Legacy field; write as 0x0000. Reserved for future use.
 ```
 
+The four words of Block 2 are big-endian, high byte first, as the Schema 0 serial number wrote them and as the serial prints (`4101-0007-002A-0000`): the one place on the map where a word is not little-endian.
+
 The serial number block follows the convention that the Margay data logger established (Schema 0). Preserving this layout keeps it consistent with existing NW manufacturing records. Group ID and unique ID assignment are the device manufacturer's responsibility: no central registry is required, and uniqueness within a deployment is the practical requirement.
 
 ### Block 3 (0x18–0x1F): Integrity and administration
