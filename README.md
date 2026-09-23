@@ -172,8 +172,8 @@ UART has no inherent framing: a bare address byte will be misinterpreted if the 
 Magic Preamble frame format:
 
 ```
-Request  (controller → device):  [0xAA][0x35][page_addr]           3 bytes
-Response (device → controller):  [0xAA][0x35][page_addr][32 bytes][CRC-8]  36 bytes
+Request  (controller → device):  [0xAA][0x55][page_addr]           3 bytes
+Response (device → controller):  [0xAA][0x55][page_addr][32 bytes][CRC-8]  36 bytes
 ```
 
 The preamble in the response lets the controller re-synchronise if it misses the start. Both COBS and Magic Preamble framing are acceptable NW UART conventions. The choice is per-device, and you should document it in the device's own specification.
@@ -321,21 +321,23 @@ Address  Field         Access      Contents
 
 **Report kinds** (bits 4–0 of 0x47). A report is a *fault* when the device also sets the chip's Status bit for that reading (the data are not to be trusted); a report that sets no Status bit is a *notice*, news the controller should record but the data stand.
 
-| Kind | Meaning |
-|------|---------|
-| 0 | No report |
-| 1 | Chip did not acknowledge on its bus |
-| 2 | Conversion timeout |
-| 3 | Checksum or CRC failure reported by the chip |
-| 4 | Value outside the chip's valid range |
-| 5 | Chip not initialised or failed self-test |
-| 6 | Device reset since the controller last wrote Control (configuration lost); a notice |
-| 7 | Configuration write rejected |
-| 8 | Supply or power-good fault |
-| 9 | Calibration stored (the device wrote Page 1; a notice) |
-| 10 | Batch abandoned: the controller stopped triggering and the device powered its chips down (a notice) |
-| 11–15 | Reserved, universal |
-| 16–31 | Device-specific, defined in the appendix, which says whether each is a fault or a notice |
+| Kind | Meaning | Note word | Printed as |
+|------|---------|-----------|------------|
+| 0 | No report | None | none |
+| 1 | Chip did not acknowledge on its bus | NotAnswering | not answering |
+| 2 | Conversion timeout | Timeout | timed out |
+| 3 | Checksum or CRC failure reported by the chip; on the unit, Page 0 failed its check | ChecksumFailed; on the unit, Page0Invalid | checksum failed; Page 0 invalid |
+| 4 | Value outside the chip's valid range | OutOfRange | out of range |
+| 5 | Chip not initialised or failed self-test | SelfTestFailed | self-test failed |
+| 6 | Device reset since the controller last wrote Control (configuration lost); a notice | Restarted | restarted since configured |
+| 7 | Configuration write rejected | ConfigRejected | configuration rejected |
+| 8 | Supply or power-good fault | PowerFault | power fault |
+| 9 | Calibration stored (the device wrote Page 1; a notice) | CalibrationStored | calibration stored |
+| 10 | Batch abandoned: the controller stopped triggering and the device powered its chips down (a notice) | BatchAbandoned | batch abandoned |
+| 11–15 | Reserved, universal | | |
+| 16–31 | Device-specific, defined in the appendix, which says whether each is a fault or a notice, and gives its note word | | |
+
+A library writes a report into a logger's note column as one token, the chip name followed by the note word: `LiDARNotAnswering`, `SHT31ChecksumFailed`, `AccelCalibrationStored`, `UnitRestarted`. Chip names come from the appendix's chip table, and the table names a chip by its function when the device has one of its kind (Clock, Battery, SDCard, LiDAR, Accel) and by its part number when only the part tells two apart (SHT31 and LPS35HW, MS5803 and MCP9808, VEML6075 and VEML6030).
 
 **Rules**
 
@@ -720,59 +722,80 @@ No Page 1. Calibration constants are hardcoded in the library.
 
 ### Margay (data logger)
 
-Margay is an I²C controller, not a peripheral; it queries sensors on the bus rather than responding to queries itself. Schema 1 formalizes its existing EEPROM serial number as Page 0, and defines a hypothetical Page 2 for the case where Margay ever acts as an I²C peripheral of a higher-level device (e.g., a cellular gateway or satellite modem). **Page 2 is not implemented. It is reserved for future use.**
+Margay is an I²C controller: it queries the sensors on its bus, and no I²C peripheral reads it. It is a Schema 1 device all the same (decided 2026-09-23): it carries Page 0 in EEPROM, keeps Page 1 there for its calibration, and maintains Pages 2 and 3 in SRAM as a reading of itself, with a Report register of its own, so that its rows in a status file decode like any sensor's and a gateway can read it over UART (the Magic Preamble transport) the way a logger reads a sensor. The UART serving is Okapi's to build first.
 
 #### Page 0
 
 ```
 Block 0:  Schema=0x01, Name='M','a','r','g','a','y',0x00
-Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=[mfr], 0x00,0x00,0x00, Reserved
+Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=0x00 (a logger's firmware is its library, reported by the library), 0x00,0x00,0x00, Reserved
 Block 2:  Board type=0x4D03 ('M'=0x4D, rev 3), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
 Block 3:  Reserved, Magic=0x4E, CRC=[computed], I²C address=0x00 (unassigned)
 ```
 
-Block 2 keeps the format of the existing 8-byte Schema 0 EEPROM serial number (board type, group ID, unique ID, FirmwareID) with no data loss, but not its location: Schema 0 wrote those 8 bytes at the very end of EEPROM, which under Schema 1 is Block 3 (reserved, magic, CRC, address), while Block 2 sits 8 bytes earlier at Page 0 offset 0x10–0x17. A logger library that reads its serial number from the last 8 bytes therefore reads Block 3 once the board is provisioned. Your library must instead read Page 0 (schema byte 0x01, magic, CRC) and take the serial number from Block 2, falling back to the old location when the schema byte is not 0x01. The board type encoding (`'M'` = 0x4D high byte, revision index low byte) already followed the Schema 1 convention before the spec was written.
+Block 2 keeps the format of the existing 8-byte Schema 0 EEPROM serial number (board type, group ID, unique ID, FirmwareID) with no data loss, but not its location: Schema 0 wrote those 8 bytes at the very end of EEPROM, which under Schema 1 is the last block of Page 1, while Block 2 sits at Page 0 offset 0x10–0x17. A logger library that reads its serial number from the last 8 bytes therefore reads calibration once the board is provisioned. Your library must instead read Page 0 (schema byte 0x01, magic, CRC) and take the serial number from Block 2, falling back to the old location when the schema byte is not 0x01. The board type encoding (`'M'` = 0x4D high byte, revision index low byte) already followed the Schema 1 convention before the spec was written.
 
-#### Page 2 (0x40–0x5F): Logger status (hypothetical)
+#### Page 1 (0x20–0x3F): Calibration
 
-If Margay ever gains an I²C peripheral interface, `0x4D` (ASCII `'M'`) is the natural address. The layout below exposes the data a higher-level device would most need: current time, battery state, onboard environment, and logger status. Its subsystem table follows the same index rules as a sensor's chip table:
+Written once by NW-Provision per board, from the hardware model; the library reads it at boot and falls back to its built-in constants when the page is blank (0xFF).
 
-| Index | Subsystem |
-|-------|-----------|
-| 0 | SD card |
-| 1 | DS3231M RTC |
-| 2 | BME280 onboard environment |
-| 3 | Sensor bus |
-| 4 | Battery |
+```
+  0x20–0x21   Battery divider × 1000, uint16 (2000 for models 1.0–2.x, 9000 for 3.0)
+  0x22–0x31   Thermistor Steinhart–Hart A, B, C, D, float32 each, little-endian
+  0x32–0x33   Battery low threshold, uint16, 0.01 V (a fault below it)
+  0x34        Battery warning, uint8, percent (a notice below it)
+  0x35–0x3F   Reserved
+```
 
-Block 0 (0x40–0x47) is the universal block. Config (0x46): reserved. Logger state continues on Page 3.
+#### Page 2 (0x40–0x5F): The logger's reading
+
+Chip table:
+
+| Index | Chip | The library detects |
+|-------|------|---------------------|
+| 0 | SDCard | no card (card-detect), the boot write-and-read-back failed |
+| 1 | Clock (DS3231M) | not answering on the internal bus |
+| 2 | BME280 (onboard environment, models 2.0 and up) | not answering |
+| 3 | SensorBus (the switched external I²C rail) | an address the sketch declared that does not answer |
+| 4 | Battery (thermistor and divider through the MCP3421 or the ADC) | below the low threshold; below the warning percentage |
+
+Block 0 (0x40–0x47) is the universal block. The reading counter counts rows written to the current data file. Config (0x46): reserved, 0x00.
 
 ```
 Block 1 (0x48–0x4F)   Battery
-  0x48        Battery %, uint8, 0–100
+  0x48        Battery, uint8, percent
   0x49–0x4A   Battery voltage, uint16, 0.01 V
-  0x4B–0x4F   Reserved
+  0x4B–0x4C   Thermistor temperature, int16, 0.01 °C
+  0x4D–0x4F   Reserved
 
-Block 2 (0x50–0x57)   BME280: onboard environment
+Block 2 (0x50–0x57)   BME280: onboard environment (0x00 on models without it)
   0x50–0x51   Temperature, int16, 0.01 °C
   0x52–0x53   Humidity, uint16, 0.01 %RH
   0x54–0x57   Pressure, uint32, 0.01 hPa
 
-Block 3 (0x58–0x5F)   DS3231M: RTC
-  0x58–0x5B   Timestamp, uint32, Unix time (seconds since 1970-01-01 UTC)
-  0x5C–0x5D   Temperature, int16, 0.01 °C
+Block 3 (0x58–0x5F)   Clock
+  0x58–0x5B   Time, uint32, Unix seconds UTC
+  0x5C–0x5D   Clock temperature, int16, 0.01 °C
   0x5E–0x5F   Reserved
 
 Page 3, Block 0 (0x60–0x67)   Logger state
-  0x60–0x61   External interrupt count, uint16, accumulated
-  0x62–0x63   Log file number, uint16
-  0x64–0x67   Log interval, uint32, seconds
+  0x60–0x61   Log file number, uint16
+  0x62–0x65   Log interval, uint32, seconds
+  0x66–0x67   External interrupt count, uint16, since power-up
 Page 3, Blocks 1–3 (0x68–0x7F)   Reserved
 ```
 
-No Page 1. Battery curve coefficients and Steinhart–Hart thermistor constants are hardcoded in the library.
+Reports. The universal kinds apply to the chips (SDCardMissing is chip 0 kind 1, SDCardSelfTestFailed chip 0 kind 5, ClockNotAnswering chip 1 kind 1, BME280NotAnswering chip 2 kind 1, BatteryLow chip 4 kind 4, all faults; UnitRestarted at boot). Device-specific kinds:
 
----
+| Code | Chip, kind | Note word | Fault or notice | When |
+|------|-----------|-----------|-----------------|------|
+| 0x90 | Battery, 16 | BatteryWarning | notice | below the warning percentage |
+| 0x30 | Clock, 16 | ClockSet | notice | the time was set from serial |
+| 0xF0 | unit, 16 | LoggingStarted | notice | logging began, at power-up or by the button |
+| 0xF1 | unit, 17 | NewLogFile | notice | a new data and status file pair was opened |
+| 0xF2 | unit, 18 | RowNotWritten | notice | a data row could not be written to the card |
+
+A logger writes its own reports into its status file the way it writes a sensor's: it watches itself.
 
 ## I²C address registry
 
