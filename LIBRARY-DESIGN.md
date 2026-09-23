@@ -15,7 +15,7 @@
 - `bool updateMeasurements(component = ALL)` – the one function that touches the bus for data; takes one reading of every chip or one chip alone; per-chip functions where a device has them (`updateRange()`, `updateOrientation()`). Each reading is *requested* (`requestReading(component)` writes trigger + chip-select to the control byte) and *waited for* (the reading counter advances), so N readings are N measurements. The data are read through `NW_Device::readData()`, which re-reads the counter after the bytes and retries (twice at most) if a reading committed in between; `readBytes()` is for Page 0, calibration and single registers.
 - `get<Field>()` accessors read fields, never the bus. Readings are kept in named per-measurement static arrays (`<LIB>_<FIELD>_CAPACITY`, default 1, no heap); `get<Field>Mean/Std/Sterr/Median()` are two-pass over them; `set<Field>Readings(n)` clamps to capacity; `get<Field>Count()` is the valid count.
 - `getHeader()` / `getString()` – one CSV row (String); width follows configuration. `printHeader(Print&)`, `printReading(Print&)` (stored reading, never acquires), `logReading(Print&)` (one reading, then print) – to an SdFat `File`, `Serial`, or a `BufferPrint`; no buffers, no offsets. `beginReadings(component)` / `endReadings()` bracket a run. **Required on every sensor library.**
-- `ready()`, `newReading()`; `faulted(chip)`, `anyFault()`, `faultChip()`, `faultKind()`, `printFault(Print&)`.
+- `ready()`, `newReading()`; `faulted(chip)`, `anyFault()`, `reportChip()`, `reportKind()`, `printReport(Print&)`.
 - Per-reading wait: the library's ceiling on waiting for the counter to move (Apis `timeoutGlobal`, 500 ms) must exceed the device's slowest path to ready, which is its fault path (Apis patch 2: failed power-up with one retry plus the accelerometer wait, ~440 ms). It is a ceiling, not a delay; only a device that acknowledges and then never completes reaches it. Derive it from the per-chip timing table once measured (Project-Apis #25).
 - Batch on a dead chip: the device does not retry a failed power-up on every trigger of the batch, and the library stops the batch at a power-up fault (chip fault kind 1 or 5), so an arbitrarily large N costs nothing when the chip is absent.
 - Batch abandonment (device-side timer, Apis 2 s): DEFERRED (Andy 2026-09-22) until "batch" itself is thought through; see #25 item 5.
@@ -61,7 +61,7 @@ Two other threads meet here: the Schema 1 register map (NW-Device-Specification)
                                         │ I²C
                           DEVICE SIDE (ATtiny firmware, Schema 1 sensors only)
  ┌───────────────────────────────────────────────────────────────────────────────┐
- │ Register map   Page 0 identity (EEPROM)  │  Page 1: 0x20 status, 0x21 fault,   │
+ │ Register map   Page 0 identity (EEPROM)  │  Page 1: 0x20 status, 0x27 report,   │
  │                                          │  0x22.. data,  0x3F control (prop.)  │
  ├───────────────────────────────────────────────────────────────────────────────┤
  │ Handshake mirror – same in every firmware                                       │
@@ -162,13 +162,13 @@ Template, not base class: no vtable, no dependency on Core. Each reading reaches
   0x25              held powered; 0 = one per trigger. Decided 2026-09-22 (#23); replaces the counter-extension reserve.
   0x26  CONFIG      device-specific, writable, volatile; 8 bits per appendix; 0x00 = defaults
                     (≤6 bits needed by any current device; more → device's own data area, never Block 0)
-  0x27  FAULT       latched, read-only; cleared by any write to CONTROL
+  0x27  REPORT      latched, read-only; the device's most recent report, fault or notice; cleared by any write to CONTROL
         bits 7–5 chip (0–6; 7 = the unit)   bits 4–0 kind: 0 none · 1 no-ack · 2 timeout · 3 chip checksum
         4 out of range · 5 not initialised · 6 reset since last CONTROL write · 7 config rejected
-        8 supply fault · 9–15 reserved universal · 16–31 device-specific
+        8 supply fault · 9 calibration stored (notice) · 10 batch abandoned (notice) · 11–15 reserved universal · 16–31 device-specific
 ```
-Rules: only 0x21, 0x24–0x25 and 0x26 accept writes (firmware checks the address in `receiveEvent()`); page rewrite + counter increment are atomic (interrupts off); ready clears when a reading starts (triggered or timed) and sets when registers are complete, counter increments then; FAULT is latched (status bits are live) and a CONTROL write acknowledges it; software reset dropped (rail power-cycle; Tally's counter reset is device-specific in CONFIG). Data in Blocks 1–3 (24 bytes); Libelle (28) and Margay-hypothetical (30) need a second data page. Each appendix gains a numbered chip table (fixes fault/select/fault-code index) and its CONFIG byte.
-Library surface implied: `ready()`, `newReading()`, `requestReading(component)` (writes the mask), `faulted(chip)`, `faultChip()`, `faultKind()`, `printFault(Print&)`, `sleep()`, per-device config setters.
+Rules: only 0x21, 0x24–0x25 and 0x26 accept writes (firmware checks the address in `receiveEvent()`); page rewrite + counter increment are atomic (interrupts off); ready clears when a reading starts (triggered or timed) and sets when registers are complete, counter increments then; REPORT is latched (status bits are live) and a CONTROL write acknowledges it; the library reads Block 0 in begin() so boot reports survive; software reset dropped (rail power-cycle; Tally's counter reset is device-specific in CONFIG). Data in Blocks 1–3 (24 bytes); Libelle (28) and Margay-hypothetical (30) need a second data page. Each appendix gains a numbered chip table (fixes fault/select/fault-code index) and its CONFIG byte.
+Library surface implied: `ready()`, `newReading()`, `requestReading(component)` (writes the mask), `faulted(chip)`, `reportChip()`, `reportKind()`, `printReport(Print&)`, `sleep()`, per-device config setters.
 
 **Original bookend proposal (superseded):**
 - Universal **control register at Page 1 last byte, 0x3F** (mirroring the address register at 0x1F ending Page 0). Bit 0 = trigger, written by controller, self-clearing. Bits 1–7 = device-specific configuration (absorbs Walrus/Libelle update-rate bits and Apis sensitivity bits into a fixed position).
@@ -190,7 +190,7 @@ Library surface implied: `ready()`, `newReading()`, `requestReading(component)` 
 
 **Decided 2026-09-21: no `NW_` prefix.** Following the convention Adafruit's libraries use (a few true globals carry the *library's* name, `BME280_ADDRESS`; options are class-scoped enums, `Adafruit_BME280::MODE_FORCED`):
 - Group selectors are class-scoped enums: `Apis::ALL`, `Apis::RANGE`, `Apis::ORIENT`; `Walrus::MS5803`, `Walrus::MCP9808`, `Walrus::ALL`. The existing `NW_READING_*` macros in Apis (May 2026) stay as deprecated aliases.
-- Register addresses and bit masks (`REG_STATUS 0x20`, `REG_CTRL 0x21`, `REG_COUNTER 0x22`, `REG_FAULTS 0x27`, `BIT_READY`, `BIT_TRIGGER`, `BIT_PANFAULT`) are implementation details: file-local constants in each library's `.cpp`, same names everywhere, no public name. Firmware sketches use the same names as plain `#define`s.
+- Register addresses and bit masks (`REG_STATUS 0x20`, `REG_CTRL 0x21`, `REG_COUNTER 0x22`, `REG_REPORT 0x27`, `BIT_READY`, `BIT_TRIGGER`, `BIT_PANFAULT`) are implementation details: file-local constants in each library's `.cpp`, same names everywhere, no public name. Firmware sketches use the same names as plain `#define`s.
 - `NW_` is the prefix for exactly one thing: names exported by `NorthernWidget_Core` once it exists (it is Core's library name); the register constants move there and gain the prefix then. `NW_BME280` is a library name, not a constant.
 
 Provenance: *exists* = in the code today; *rename* = the operation exists under another name; *new* = nothing does this yet.
@@ -224,7 +224,7 @@ Where Apis_Library differs from the names table above, Apis is the reference and
 - Version getters: `getHardwareMajor()`, `getHardwareMinor()`, `getFirmwareVersion()` (not one packed `getHardwareVersion()`).
 - Handshake: `ready()`, `newReading()`, `requestReading(component)`; `newData()` does not exist in Apis (no alias needed).
 - Readings: `updateRange()`/`updateOrientation()` are the per-chip single-reading functions (each triggers and waits via the counter); `updateMeasurements(component)` takes N of them; `logReading` uses the former.
-- Faults: `faulted(chip)`, `anyFault()`, `faultChip()`, `faultKind()`, `printFault(Print&)`.
+- Reports and faults: `faulted(chip)`, `anyFault()`, `reportChip()`, `reportKind()`, `printReport(Print&)`.
 - Statistics: two-pass over `_rangeReadings[]`/`_pitchReadings[]`/`_rollReadings[]`; `getRangeMedian()` etc.; `setRangeReadings()`/`setOrientReadings()` clamp and return the value set; `timeoutGlobal` is a private member (500 ms), as in Haar.
 - Deprecated but kept: `beginRawReadings/takeRawReading/endRawReadings`, `setNRangeReadings/setNOrientReadings`, `NW_READING_*`.
 Walrus and Haar should copy this shape; what is identical across the three becomes `NorthernWidget_Core`.
@@ -291,9 +291,9 @@ Walrus and Haar should copy this shape; what is identical across the three becom
 | bus primitives `readBytes`, `writeByte`, `writeRequest` (0x24–0x25) | 19 |
 | `setI2CAddress` (0x1F) | 3 |
 | handshake: `ready()`, `readCounter()`, `newReading()`, `requestReading(mask)`, `takeReading(mask)` with status/fault capture and the per-reading wait ceiling | 37 |
-| faults: `faulted(chip)`, `anyFault()`, `faultChip()`, `faultKind()`, `printFault(Print&, chipNames)` with the universal kind-name table | 20 |
+| reports and faults: `faulted(chip)`, `anyFault()`, `reportChip()`, `reportKind()`, `printReport(Print&, chipNames)` with the universal kind-name table | 20 |
 | register constants (`NW_REG_*`, `NW_BIT_*`), gaining the prefix as decided | – |
-| members: address, three version bytes, status, fault, last counter, timeout | – |
+| members: address, three version bytes, status, report, last counter, timeout | – |
 
 | Moves to Core: common layer (design-defined) | Apis lines |
 |---|---|
@@ -318,7 +318,7 @@ Walrus and Haar should copy this shape; what is identical across the three becom
 4. Apis `library.properties` gains `depends=NW_Core`; README; NW-Status gains an "on NW_Core" column.
 5. Walrus written on Core (its own series), then Haar. Anything that does not fit is a Core change, made once.
 
-**Decisions to confirm before step 0:** class names `NW_Device` and `NW_Readings`; `printFault` taking the device's chip-name table as an argument; the shared stubs living in Core (each library's harness then includes `../../../NW_Core/extras/test/` within the workspace, or a copy for a fresh clone); Library Manager registration of NW_Core before any consumer is released (a dependency the Library Manager cannot resolve blocks installation).
+**Decisions to confirm before step 0:** class names `NW_Device` and `NW_Readings`; `printReport` taking the device's chip-name table as an argument; the shared stubs living in Core (each library's harness then includes `../../../NW_Core/extras/test/` within the workspace, or a copy for a fresh clone); Library Manager registration of NW_Core before any consumer is released (a dependency the Library Manager cannot resolve blocks installation).
 
 ### 11a. Review of the plan (independent agent, 2026-09-23) – changes accepted
 
@@ -330,7 +330,7 @@ Verified by the reviewer before review: Apis harness passes (844 transactions); 
 4. **Haar argues for the template:** four measurements on two chips with three storage types (int16, uint16, uint32).
 5. **Template cost measured:** three instantiations +552 B flash on uno vs hand-written, RAM equal. Median copies the array twice today (getRangeMedian then _median: 512 B of stack at capacity 64); `NW_Readings::median()` copies once. Document the stack ceiling for large capacities.
 6. **Composition stands, for the right reason:** non-virtual inheritance has no vtable either; the real cost is that every `NW_Device` public method, `readBytes` included, would become Apis's public API. Thirteen forwarding methods (eleven one-liners, plus `begin` and `requestReading`) are acceptable, written inline in the header. Do not expose `device()`.
-7. **printFault by ownership** – revised 2026-09-23 (Andy): the device's part turned out to be nineteen identical lines per library around a two-entry name table, so `NW_Fault::print(out, chipNames, n)` and `note(chipNames, n)` hold them once and the library passes its table per call (no stored pointer; the names stay the device's own). Original decision: Core prints the kind from the universal table (PROGMEM); the device prints its own chip name. No table passing, no stored pointer. Needs a PROGMEM stub in the harness Arduino.h.
+7. **printReport (then printFault) by ownership** – revised 2026-09-23 (Andy): the device's part turned out to be nineteen identical lines per library around a two-entry name table, so `NW_Fault::print(out, chipNames, n)` and `note(chipNames, n)` hold them once and the library passes its table per call (no stored pointer; the names stay the device's own). Original decision: Core prints the kind from the universal table (PROGMEM); the device prints its own chip name. No table passing, no stored pointer. Needs a PROGMEM stub in the harness Arduino.h.
 8. **Harness:** a consumer's driver includes the library's .cpp directly, so after step 2 it must include Core's sources too; `run.sh` locates them by `NW_CORE=${NW_CORE:-../../../NW_Core}`; CI (currently docs only) would check out NW_Core as a second checkout. The Wire stub needs a `requestFrom(int,int)` overload (Walrus calls it that way).
 9. **Library Manager:** `depends=NW_Core (>=1.0.0)` is valid syntax; Apis's registry name is `Apis`; the NorthernWidget-libraries bundle resolves nothing, so an NW_Core folder goes in it at the end-of-overhaul refresh; whether IDE 2 upgrades an installed Core when a consumer's constraint tightens is unverified.
 10. **Omissions fixed:** the per-reading ceiling is per device (Apis 500; Walrus's old 1000 ms was a `//FIX??` guess and the port keeps Core's 500 ms default, which exceeds its firmware's slowest path of a 100 ms poll plus the MS5803 conversions): Core gets `setTimeout(ms)`; `begin()` keeps storing the versions before refusing (harness test 8 depends on it); the step-2 commit carries `depends=`; `APIS_NOT_MEASURED` and the deprecated raw API stay untouched in Apis.
