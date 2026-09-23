@@ -891,6 +891,29 @@ Tracks whether each device's library/firmware and hardware have been updated for
 
 Note: Liasis shows `–` across all columns because it does not yet have an onboard MCU. All columns will remain not applicable until the hardware is updated. See [Project-Liasis issue #2](https://github.com/NorthernWidget-Skunkworks/Project-Liasis/issues/2).
 
+### Conformance checks
+
+Each rule below is exercised by a case in a host-side harness: NW_Core's `extras/test/test_output.cpp` for the universal rules, and each library's own `extras/test/` for its register map and status row. A case is a line of recorded output compared byte for byte with `baseline.txt`; `run.sh --record` re-records after an intended change, and the diff is reviewed in the commit. The case names are the bracketed labels in the harness output.
+
+| Rule | Harness | Case |
+|------|---------|------|
+| `begin()` rejects a schema byte other than 0x01 | NW_Core | `[begin] schema 0x00` |
+| `begin()` rejects a wrong name, and a prefix of the right one | NW_Core | `[begin] wrong name`, `[begin] name 'Api' vs 'Apis'` |
+| `begin()` rejects a firmware patch below the library minimum | NW_Core | `[begin] patch 1 < min 2` |
+| `begin()` waits a bounded time for a device still booting | NW_Core | `[begin] boots after 30 ms`, `[begin] boots after 300 ms`, `[begin] absent` |
+| Boot reports are read before the first acknowledgement | NW_Core | `[begin] boot report`, `[begin] boot status line` |
+| Trigger, chip select, ready, and the counter | NW_Core | `[handshake] request`, `[handshake] takeReading`, `[handshake] newReading` |
+| The counter is re-read after a multi-transaction read, with bounded retries | NW_Core | `[readData] one commit during the read`, `[readData] a commit on every transaction`, `[readData] after the runaway stops`, `[readData] quiet device` |
+| A free-running device is read without a request | NW_Core | `[free-running] waitReading without request` |
+| A fault overwrites a notice; a notice never overwrites a fault | NW_Core | `[pages] notice then fault`, `[pages] after a reading` |
+| Page 0 validity and a blank Page 1 on the device side | NW_Core | `[pages] page0Valid` |
+| Report text and note tokens, universal and device-specific | NW_Core | `[report text]`, `[report] device-specific kind` |
+| The status row's fourteen columns | NW_Core | `[snapshot]`, `[pages] snapshot` |
+| Readings requested, batches, and dead chips in a batch | Apis_Library | `[request]`, `[batch stats]`, `[faults]` |
+| The zero ring and generation (Apis patch 5) | Apis_Library | `[zero generation]`, `[dumpZeros]` |
+| Each library's register map, faults, and status row | Apis, Walrus, Haar, Libelle, T9602 libraries | `[status]` and the library's own cases |
+| Every library compiles on Margay and on Okapi | NW-Tests `compile.py` | one sketch per library and logger |
+
 ---
 
 ## License
