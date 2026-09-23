@@ -244,8 +244,11 @@ The serial number block follows the convention that the Margay data logger estab
 
 ```
 Address  Field       Size  Contents
-  0x18   Reserved    5 B   0x00
-  –0x1C
+  0x18   Build       4 B   The first four bytes of the git commit the firmware was
+  –0x1B  commit            built from (the first eight hex digits of its SHA-1),
+                           or 0x00 when the build recorded none.
+  0x1C   Build flags 1 B   bit 0: the working tree held uncommitted changes when
+                           the firmware was built (a "dirty" build). Bits 1–7: 0x00.
   0x1D   Magic byte  1 B   Fixed NW marker: always 0x4E (ASCII 'N'). A controller
                            can check this byte as a quick sanity test before
                            computing the full CRC-8.
@@ -272,6 +275,8 @@ uint8_t crc8_smbus(const uint8_t *data, uint8_t len) {
 }
 /* Usage: crc8_smbus(page0, 0x1E) should equal page0[0x1E] */
 ```
+
+**The served copy of Page 0.** Your device serves Page 0 from SRAM, not from EEPROM. At boot the firmware copies the 64-byte stored image into its register array, checks the CRC of the copy, and then rewrites the three things that belong to the firmware rather than to the board: the firmware patch at 0x0A, the build commit at 0x18–0x1B, and the build flags at 0x1C. It recomputes the CRC at 0x1E over the served bytes, and a controller that checks the CRC therefore checks the copy it reads. EEPROM keeps zeros in those six bytes (NW-Provision writes them as 0x00), and the firmware never writes them back. The build wrapper ([NW-Build](https://github.com/NorthernWidget-Skunkworks/NW-Build)) defines `FW_COMMIT` from git at compile time, with a trailing `+` when the tree is dirty; an Arduino IDE build leaves it blank, the bytes stay zero, and a library prints an empty FWCommit column. Furthermore, the same wrapper defines `<LIB>_LIBRARY_COMMIT` for every library it compiles, which is how the Lib and LibCommit columns of a status file are filled (see [LIBRARY-DESIGN.md](LIBRARY-DESIGN.md)).
 
 ---
 
@@ -383,7 +388,7 @@ The design took the following existing standards into account:
 Block 0:  Schema=0x01, Name='A','p','i','s',0x00,0x00,0x00
 Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=[mfr], 0x00,0x00,0x00, Reserved
 Block 2:  Board type=0x4100 ('A'=0x41, rev 0), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
-Block 3:  Reserved, Magic=0x4E, CRC=[computed], I2C address=0x41
+Block 3:  Build commit=[build], flags=[build], Magic=0x4E, CRC=[computed], I2C address=0x41
 ```
 
 Legacy deployed units carry board type `0x6C00` and I²C address `0x50` (pre-Schema-1).
@@ -442,7 +447,7 @@ Block 3 (0x58–0x5F)   0x58–0x59 zero generation, uint16 LE, the same value, 
 Block 0:  Schema=0x01, Name='H','a','a','r',0x00,0x00,0x00
 Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=[mfr], 0x00,0x00,0x00, Reserved
 Block 2:  Board type=0x4801 ('H'=0x48, rev 1), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
-Block 3:  Reserved, Magic=0x4E, CRC=[computed], I2C address=0x48
+Block 3:  Build commit=[build], flags=[build], Magic=0x4E, CRC=[computed], I2C address=0x48
 ```
 
 #### Page 2 (0x40–0x5F): Sensor data
@@ -498,7 +503,7 @@ Unit rationale: 0.01 hPa is the natural meteorological unit, and it aligns with 
 Block 0:  Schema=0x01, Name='W','a','l','r','u','s',0x00
 Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=[mfr], 0x00,0x00,0x00, Reserved
 Block 2:  Board type=0x5702 ('W'=0x57, rev 2), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
-Block 3:  Reserved, Magic=0x4E, CRC=[computed], I2C address=0x57
+Block 3:  Build commit=[build], flags=[build], Magic=0x4E, CRC=[computed], I2C address=0x57
 ```
 
 #### Page 2 (0x40–0x5F): Sensor data
@@ -552,7 +557,7 @@ Unit rationale: µBar is the MS5803 library's internal `_pressure_actual` unit, 
 Block 0:  Schema=0x01, Name='L','i','b','e','l','l','e'  (exact 7-byte fit)
 Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=[mfr], 0x00,0x00,0x00, Reserved
 Block 2:  Board type=0x4C01 ('L'=0x4C, rev 1), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
-Block 3:  Reserved, Magic=0x4E, CRC=[computed], I2C address=0x4C (UP) or 0x0C (DOWN)
+Block 3:  Build commit=[build], flags=[build], Magic=0x4E, CRC=[computed], I2C address=0x4C (UP) or 0x0C (DOWN)
           [DOWN = 'L' (0x4C) XOR 0x40; see I²C address registry for secondary address scheme]
 ```
 
@@ -612,7 +617,7 @@ No Page 1. Calibration constants (Steinhart-Hart coefficients, UV cross-talk com
 Block 0:  Schema=0x01, Name='L','i','a','s','i','s',0x00
 Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=[mfr], 0x00,0x00,0x00, Reserved
 Block 2:  Board type=0x6C01 ('l'=0x6C, rev 1), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
-Block 3:  Reserved, Magic=0x4E, CRC=[computed], I2C address=TBD
+Block 3:  Build commit=[build], flags=[build], Magic=0x4E, CRC=[computed], I2C address=TBD
 ```
 
 Note: `0x6C00` is reserved. It was assigned to Apis before the ASCII-initial naming convention was established. Legacy deployed units carry board types `0x2400`/`0x2401` (formerly Dyson LW, Monarch LW).
@@ -633,7 +638,7 @@ Tally counts pulses from a reed switch, a tipping-bucket gauge or an anemometer 
 Block 0:  Schema=0x01, Name='T','a','l','l','y',0x00,0x00
 Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=[mfr], 0x00,0x00,0x00, Reserved
 Block 2:  Board type=0x5401 ('T'=0x54, rev 1), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
-Block 3:  Reserved, Magic=0x4E, CRC=[computed], I2C address=0x54
+Block 3:  Build commit=[build], flags=[build], Magic=0x4E, CRC=[computed], I2C address=0x54
 ```
 
 #### Page 2 (0x40–0x5F): Counter data
@@ -672,7 +677,7 @@ Okapi is an I²C controller that communicates with a Particle Boron telemetry bo
 Block 0:  Schema=0x01, Name='O','k','a','p','i',0x00,0x00
 Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=[mfr], 0x00,0x00,0x00, Reserved
 Block 2:  Board type=0x4F01 ('O'=0x4F, rev 1), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
-Block 3:  Reserved, Magic=0x4E, CRC=[computed], Peripheral address=0x00 (unassigned)
+Block 3:  Build commit=0x00000000, flags=0x00 (a logger's build is its library's, reported in the status file), Magic=0x4E, CRC=[computed], Peripheral address=0x00 (unassigned)
 ```
 
 Pre-production prototype units ("Resnik") carry board type `0x9950` and are not field-upgradeable to Schema 1.
@@ -731,7 +736,7 @@ Margay is an I²C controller: it queries the sensors on its bus, and no I²C per
 Block 0:  Schema=0x01, Name='M','a','r','g','a','y',0x00
 Block 1:  HW major=[mfr], HW minor=[mfr], FW patch=0x00 (a logger's firmware is its library, reported by the library), 0x00,0x00,0x00, Reserved
 Block 2:  Board type=0x4D03 ('M'=0x4D, rev 3), Group ID=[mfr], Unique ID=[mfr], FirmwareID=0x0000
-Block 3:  Reserved, Magic=0x4E, CRC=[computed], I²C address=0x00 (unassigned)
+Block 3:  Build commit=0x00000000, flags=0x00 (a logger's build is its library's, reported in the status file), Magic=0x4E, CRC=[computed], I²C address=0x00 (unassigned)
 ```
 
 Block 2 keeps the format of the existing 8-byte Schema 0 EEPROM serial number (board type, group ID, unique ID, FirmwareID) with no data loss, but not its location: Schema 0 wrote those 8 bytes at the very end of EEPROM, which under Schema 1 is the last block of Page 1, while Block 2 sits at Page 0 offset 0x10–0x17. A logger library that reads its serial number from the last 8 bytes therefore reads calibration once the board is provisioned. Your library must instead read Page 0 (schema byte 0x01, magic, CRC) and take the serial number from Block 2, falling back to the old location when the schema byte is not 0x01. The board type encoding (`'M'` = 0x4D high byte, revision index low byte) already followed the Schema 1 convention before the spec was written.
