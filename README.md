@@ -741,6 +741,8 @@ Block 3:  Build commit=0x00000000, flags=0x00 (a logger's build is its library's
 
 Block 2 keeps the format of the existing 8-byte Schema 0 EEPROM serial number (board type, group ID, unique ID, FirmwareID) with no data loss, but not its location: Schema 0 wrote those 8 bytes at the very end of EEPROM, which under Schema 1 is the last block of Page 1, while Block 2 sits at Page 0 offset 0x10–0x17. A logger library that reads its serial number from the last 8 bytes therefore reads calibration once the board is provisioned. Your library must instead read Page 0 (schema byte 0x01, magic, CRC) and take the serial number from Block 2, falling back to the old location when the schema byte is not 0x01. The board type encoding (`'M'` = 0x4D high byte, revision index low byte) already followed the Schema 1 convention before the spec was written.
 
+In the status file the logger's own row fills FW and FWCommit with the library's version and build commit (`MARGAY_LIBRARY_VERSION`, `MARGAY_LIBRARY_COMMIT`), leaves Lib blank (a sketch has no version), and fills LibCommit with `SKETCH_COMMIT`, the sketch's build commit. Both commits are blank in an IDE build.
+
 #### Page 1 (0x20–0x3F): Calibration
 
 Written once by NW-Provision per board, from the hardware model; the library reads it at boot and falls back to its built-in constants when the page is blank (0xFF).
