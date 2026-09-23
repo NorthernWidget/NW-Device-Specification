@@ -604,7 +604,7 @@ No Page 2. Calibration constants (Steinhart-Hart coefficients, UV cross-talk com
 
 > **Planned MCU migration:** The proposal for hardware v2 is to migrate from the ATtiny841 (512 B EEPROM, Page 0 at `0x01E0`) to the ATtiny1634 (256 B EEPROM, Page 0 at `0x00E0`), which aligns Libelle with Apis, Haar, and Walrus. The provisioning table and avrdude part will update accordingly. See [Project-Libelle issue #20](https://github.com/NorthernWidget-Skunkworks/Project-Libelle/issues/20).
 
-> **Migration note:** the firmware on `master` (`Libelle_Driver_ShortWave`) implements this map since 2026-09-23 (patch 1): Page 0 from EEPROM (0x1E0–0x1FF on the ATtiny841) with CRC check, the writable-register rule with the address persisted, 32-byte page reads, data at 0x28–0x3D, and the Block 0 handshake (trigger or the Config free-running timer, chip select, reading counter, unit faults at boot; per-chip faults not yet reported because the chip reads discard acknowledges). The default address moved from 0x40/0x41 to 0x4C UP and 0x0C DOWN by the jumper. Hardware v1 still serves no Page 3. Unreleased and not yet validated on hardware; the library is not yet on NW_Core.
+> **Migration note:** the firmware on `master` (`Libelle_Driver_ShortWave`) implements this map since 2026-09-23 (patch 1): Page 0 from EEPROM (0x1E0–0x1FF on the ATtiny841) with CRC check, the writable-register rule with the address persisted, 32-byte page reads, data at 0x28–0x3D, and the Block 0 handshake (trigger or the Config free-running timer, chip select, reading counter, unit faults at boot; per-chip faults not yet reported because the chip reads discard acknowledges). The default address moved from 0x40/0x41 to 0x4C UP and 0x0C DOWN by the jumper. Hardware v1 still serves no Page 3. The library is on NW_Core since 2026-09-23 (data from 0x28-0x3D in one read; the accelerometer read on the controller bus; the library judges the accelerometer fault itself). Unreleased and not yet validated on hardware.
 
 > **Known bug in deployed firmware:** The firmware writes UVB starting at register 0x07, but the library reads it from 0x06. `getUVB()` therefore returns approximately true_UVB × 256. All historical UVB data is affected. See [Project-Libelle issue #18](https://github.com/NorthernWidget-Skunkworks/Project-Libelle/issues/18).
 
@@ -851,7 +851,7 @@ Tracks whether each device's library/firmware and hardware have been updated for
 | Apis | ✅ firmware patch 2 and library on NW_Core (master, unreleased) | – | ✅ 2026-09-23 (host harness) | – |
 | Haar | ✅ firmware patch 1 and library on NW_Core (master, unreleased) | – | ✅ 2026-09-23 (host harness) | – |
 | Walrus | ✅ firmware patch 1 and library on NW_Core (master, unreleased) | – | ✅ 2026-09-23 (host harness) | – |
-| Libelle | – | – | – | – |
+| Libelle | ✅ firmware patch 1 and library on NW_Core (master, unreleased) | – | ✅ 2026-09-23 (host harness) | – |
 | Liasis | – | – | – | – |
 | Margay | – | – | – | – |
 | Okapi | – | – | – | – |
