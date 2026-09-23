@@ -55,7 +55,7 @@ Tag a Schema 0 snapshot release once items 1–10 are complete and the library h
 Do not begin until the spec is stable and a Schema 0 snapshot tag exists.
 
 11. **Schema 1 compliance** – implement the full Schema 1 register map per the device appendix in [NW-Device-Specification](https://github.com/NorthernWidget/NW-Device-Specification):
-    - **Page 0 (0x00–0x1F, EEPROM-backed identity):** schema byte `0x01` at `0x00`; 7-byte name at `0x01–0x07`; HW/FW version at `0x08–0x0A`; serial number block at `0x10–0x17`; magic byte `0x4E` at `0x1D`; CRC-8/SMBUS at `0x1E`; I²C address at `0x1F`
+    - **Page 0 (0x00–0x1F, EEPROM-backed identity):** schema byte `0x01` at `0x00`; 7-byte name at `0x01–0x07`; HW/FW version at `0x08–0x0A`; serial number block at `0x10–0x17`; build commit at `0x18–0x1B` and flags at `0x1C` (served copy only, from `FW_COMMIT`); magic byte `0x4E` at `0x1D`; CRC-8/SMBUS at `0x1E`; I²C address at `0x1F`
     - **Page 2 (0x40–0x5F, SRAM):** the universal Block 0 – status `0x40` (ready, per-chip fault bits, pan-fault), control `0x41` (trigger, chip select, sleep), reading counter `0x42–0x43`, readings requested `0x44–0x45` (writable count for batches), device config `0x46`, report `0x47` (the Report register: the latched code of the device's most recent report, fault or notice) – then device data from `0x48` per the appendix (Page 3 continues data past 24 bytes)
     - **Page 1 (0x20–0x3F, calibration, if applicable):** per device appendix
     - Update default I²C address to the Schema 1 value from the address registry, and check the bus-occupancy table there for clashes with logger on-board chips
