@@ -11,7 +11,7 @@ This is a transport-agnostic specification for embedded device identity, communi
 
 This specification grew out of a decade of practice building open-source environmental sensors and data loggers at [Northern Widget](https://northernwidget.com). Three generations of design appear below. Each builds on the last.
 
-### Schema 0 – Margay serial number block (c. 2015, deployed)
+### Schema 0: Margay serial number block (c. 2015, deployed)
 
 The [Margay](https://github.com/NorthernWidget/Project-Margay) data logger was the first Northern Widget hardware to carry a structured identity block. A setup script writes that block at manufacture. It is an 8-byte serial number in the last 8 bytes of the ATmega1284p's EEPROM:
 
@@ -34,7 +34,7 @@ Schema 0 is a Margay-only artifact. Sensors produced before Schema 1 typically h
 
 ---
 
-### Schema 1 prototype – Apis I2C register map (c. 2019, deployed)
+### Schema 1 prototype: Apis I2C register map (c. 2019, deployed)
 
 The [Apis](https://github.com/NorthernWidget/Project-Apis) LiDAR rangefinder board was the first Northern Widget sensor to expose a structured I2C register map. The ATtiny1634 firmware populates a 32-byte array (`Reg[32]`) in SRAM and serves it over I2C via the WireS library. The 32-byte size is deliberate: it fits within the Arduino Wire library's default transaction buffer.
 
@@ -80,7 +80,7 @@ This prototype introduced the key concepts that Schema 1 formalises: a fixed dev
 
 ---
 
-### Schema 1 – NW-Device-Specification v1 (2026)
+### Schema 1: NW-Device-Specification v1 (2026)
 
 The full specification, described in detail in the sections that follow.
 
@@ -194,11 +194,11 @@ The preamble in the response lets the controller re-synchronise if it misses the
 
 ---
 
-## Page 0 – Identity
+## Page 0: Identity
 
 32 bytes, persistent. Written at manufacture and rarely changed. Organised as four 8-byte blocks.
 
-### Block 0 (0x00–0x07) – Core identity
+### Block 0 (0x00–0x07): Core identity
 
 Read this block first. 8 bytes, one transaction. Sufficient to identify any compliant device.
 
@@ -222,7 +222,7 @@ The schema byte at 0x00 is the first thing your controller reads. Its decision t
 
 The 7-byte name field accommodates all current Northern Widget device names without truncation. A fixed-position name at a fixed address gives negligible collision probability with non-compliant devices, and no manufacturer prefix is required. Write reserved bytes as `0x00` at manufacture. `0xFF` indicates unprogrammed EEPROM.
 
-### Block 1 (0x08–0x0F) – Version
+### Block 1 (0x08–0x0F): Version
 
 ```
 Address  Field     Size  Contents
@@ -241,7 +241,7 @@ Address  Field     Size  Contents
 
 **Separate-repo convention:** Write full SemVer for hardware (0x08–0x0A) and firmware (0x0B–0x0D) independently.
 
-### Block 2 (0x10–0x17) – Serial number
+### Block 2 (0x10–0x17): Serial number
 
 ```
 Address  Field        Size  Contents
@@ -254,7 +254,7 @@ Address  Field        Size  Contents
 
 The serial number block follows the convention that the Margay data logger established (Schema 0). Preserving this layout keeps it consistent with existing NW manufacturing records. Group ID and unique ID assignment are the device manufacturer's responsibility: no central registry is required, and uniqueness within a deployment is the practical requirement.
 
-### Block 3 (0x18–0x1F) – Integrity and administration
+### Block 3 (0x18–0x1F): Integrity and administration
 
 ```
 Address  Field       Size  Contents
@@ -289,13 +289,13 @@ uint8_t crc8_smbus(const uint8_t *data, uint8_t len) {
 
 ---
 
-## Page 1 – Sensor data
+## Page 1: Sensor data
 
 32 bytes, SRAM-backed, rewritten by the device on every reading. Block 0 is universal – identical in meaning on every NW device – and Blocks 1–3 (0x28–0x3F, 24 bytes) carry the device's data, defined per device type in its appendix. A device with more than 24 bytes of data continues on Page 3 (see [Address space](#address-space)).
 
 A *reading* is one acquisition of every measurement the device reports, at one moment. A *chip* is one sensing IC on the board. Each appendix numbers its chips in a fixed order, and the status, control, and fault bytes below use that index.
 
-### Block 0 (0x20–0x27) – Status and control
+### Block 0 (0x20–0x27): Status and control
 
 ```
 Address  Field         Access      Contents
@@ -356,13 +356,13 @@ Address  Field         Access      Contents
 
 Your controller reads all 32 bytes of Page 1 in one transaction, checks ready first, then the pan-fault bit, and only then uses the data. Bit 7 gives a fault summary without your controller knowing the device's chip assignments. 0x27 gives the detail when it wants it.
 
-### Blocks 1–3 (0x28–0x3F) – Device data
+### Blocks 1–3 (0x28–0x3F): Device data
 
 The appendices define these per device. Values are little-endian, in the types and scaled units the appendix states. Each appendix also provides a numbered **chip table**, which fixes the index used by the status fault bits, the control chip-select bits, and the fault byte.
 
 ---
 
-## Page 2 – Calibration
+## Page 2: Calibration
 
 32 bytes, persistent (EEPROM-backed). Written at calibration time, and read by your controller when it wishes to verify or update calibration state. Device-specific and defined per device type.
 
@@ -396,7 +396,7 @@ Block 3:  Reserved, Magic=0x4E, CRC=[computed], I2C address=0x41
 
 Legacy deployed units carry board type `0x6C00` and I²C address `0x50` (pre-Schema-1).
 
-#### Page 1 (0x20–0x3F) – Sensor data
+#### Page 1 (0x20–0x3F): Sensor data
 
 Chip table (index used by status bits 1–6, control chip-select bits 1–6, and the fault byte):
 
@@ -424,7 +424,7 @@ Block 2 (0x30–0x37)   Accelerometer
 Block 3 (0x38–0x3F)   Reserved
 ```
 
-#### Page 2 (0x40–0x5F) – Calibration
+#### Page 2 (0x40–0x5F): Calibration
 
 ```
 Block 0 (0x40–0x47)   Accelerometer offsets
@@ -449,7 +449,7 @@ Block 2:  Board type=0x4801 ('H'=0x48, rev 1), Group ID=[mfr], Unique ID=[mfr], 
 Block 3:  Reserved, Magic=0x4E, CRC=[computed], I2C address=0x48
 ```
 
-#### Page 1 (0x20–0x3F) – Sensor data
+#### Page 1 (0x20–0x3F): Sensor data
 
 Chip table:
 
@@ -461,12 +461,12 @@ Chip table:
 Block 0 (0x20–0x27) is the universal block. Config (0x26): no bits defined. Write 0x00.
 
 ```
-Block 1 (0x28–0x2F)   SHT31 – temperature + humidity
+Block 1 (0x28–0x2F)   SHT31: temperature + humidity
   0x28–0x29   Temp SHT31, int16, 0.01 °C, little-endian
   0x2A–0x2B   Humidity, uint16, 0.01 % RH, little-endian
   0x2C–0x2F   Reserved
 
-Block 2 (0x30–0x37)   LPS35HW – pressure + temperature
+Block 2 (0x30–0x37)   LPS35HW: pressure + temperature
   0x30–0x33   Pressure, uint32, 0.01 hPa, little-endian
   0x34–0x35   Temp LPS35HW, int16, 0.01 °C, little-endian
   0x36–0x37   Reserved
@@ -505,7 +505,7 @@ Block 2:  Board type=0x5702 ('W'=0x57, rev 2), Group ID=[mfr], Unique ID=[mfr], 
 Block 3:  Reserved, Magic=0x4E, CRC=[computed], I2C address=0x57
 ```
 
-#### Page 1 (0x20–0x3F) – Sensor data
+#### Page 1 (0x20–0x3F): Sensor data
 
 Chip table:
 
@@ -517,12 +517,12 @@ Chip table:
 Block 0 (0x20–0x27) is the universal block. Config (0x26): bits 1:0 = free-running update period, 0 = 5 s, 1 = 10 s, 2 = 60 s, 3 = 300 s (as the former control register 0x00); bits 7:2 reserved.
 
 ```
-Block 1 (0x28–0x2F)   MS5803 – pressure + temperature
+Block 1 (0x28–0x2F)   MS5803: pressure + temperature
   0x28–0x2B   Pressure, int32, µBar, little-endian
   0x2C–0x2D   Temp MS5803, int16, 0.01 °C, little-endian
   0x2E–0x2F   Reserved
 
-Block 2 (0x30–0x37)   MCP9808 – external temperature
+Block 2 (0x30–0x37)   MCP9808: external temperature
   0x30–0x31   Temp ext, int16, 0.01 °C, little-endian
   0x32–0x37   Reserved
 
@@ -560,7 +560,7 @@ Block 3:  Reserved, Magic=0x4E, CRC=[computed], I2C address=0x4C (UP) or 0x0C (D
           [DOWN = 'L' (0x4C) XOR 0x40; see I²C address registry for secondary address scheme]
 ```
 
-#### Page 1 (0x20–0x3F) – Sensor data
+#### Page 1 (0x20–0x3F): Sensor data
 
 Chip table:
 
@@ -574,23 +574,23 @@ Chip table:
 Block 0 (0x20–0x27) is the universal block. Config (0x26): bits 1:0 = free-running update period (0 = 5 s, 1 = 10 s, 2 = 60 s, 3 = 300 s); bit 2 = auto-range disable (0 = auto-range each reading, as the former control register); bit 3 = run auto-range once now (self-clearing); bits 7:4 reserved.
 
 ```
-Block 1 (0x28–0x2F)   VEML6030 – visible light
+Block 1 (0x28–0x2F)   VEML6030: visible light
   0x28–0x29   ALS, uint16, raw VEML6030 counts, little-endian
   0x2A–0x2B   White, uint16, raw VEML6030 counts, little-endian
   0x2C–0x2D   Lux mult, uint16, auto-range scaler (ALS × mult × 0.0036 → lux)
   0x2E–0x2F   Reserved
 
-Block 2 (0x30–0x37)   VEML6075 – UV
+Block 2 (0x30–0x37)   VEML6075: UV
   0x30–0x33   UVA, int32, compensated counts, little-endian
   0x34–0x37   UVB, int32, compensated counts, little-endian
 
-Block 3 (0x38–0x3F)   ADS1115 – IR + temperature
+Block 3 (0x38–0x3F)   ADS1115: IR + temperature
   0x38–0x39   IR Short, uint16, raw ADC counts (×1.25e-4 → V)
   0x3A–0x3B   IR Mid, uint16, raw ADC counts (×1.25e-4 → V)
   0x3C–0x3D   Temperature, uint16, raw ADC counts (Steinhart-Hart → °C)
   0x3E–0x3F   Reserved
 
-Page 3, Block 0 (0x60–0x67)   ADXL343 – accelerometer (hardware v2 only)
+Page 3, Block 0 (0x60–0x67)   ADXL343: accelerometer (hardware v2 only)
   0x60–0x61   Accel X, int16, little-endian
   0x62–0x63   Accel Y, int16, little-endian
   0x64–0x65   Accel Z, int16, little-endian
@@ -619,7 +619,7 @@ Block 3:  Reserved, Magic=0x4E, CRC=[computed], I2C address=TBD
 
 Note: `0x6C00` is reserved. It was assigned to Apis before the ASCII-initial naming convention was established. Legacy deployed units carry board types `0x2400`/`0x2401` (formerly Dyson LW, Monarch LW).
 
-#### Page 1 (0x20–0x3F) – Sensor data
+#### Page 1 (0x20–0x3F): Sensor data
 
 Page 1 layout TBD. Liasis does not currently have an onboard MCU: it communicates via the host controller's I²C bus rather than exposing its own register map. Page 1 and the I²C address will be defined once Liasis is updated to carry its own MCU. At that point Block 0 follows the universal layout, and the chip table will be: 0 = ADS1115 (thermopile and thermistor channels). Config (0x26) would then carry the ADS1115 gain and data-rate selections.
 
@@ -640,7 +640,7 @@ Block 3:  Reserved, Magic=0x4E, CRC=[computed], Peripheral address=0x00 (unassig
 
 Pre-production prototype units ("Resnik") carry board type `0x9950` and are not field-upgradeable to Schema 1.
 
-#### Page 1 (0x20–0x3F) – Logger status – HYPOTHETICAL
+#### Page 1 (0x20–0x3F): Logger status – HYPOTHETICAL
 
 Subsystem table (a logger's "chips" are its subsystems, with the same index rules):
 
@@ -663,12 +663,12 @@ Block 1 (0x28–0x2F)   Power
   0x2D        Backup voltage, uint8, 0.1 V (AA backup rail; 0–25.5 V range)
   0x2E–0x2F   Reserved
 
-Block 2 (0x30–0x37)   BME280 – onboard environment
+Block 2 (0x30–0x37)   BME280: onboard environment
   0x30–0x31   Temperature, int16, 0.01 °C
   0x32–0x33   Humidity, uint16, 0.01 %RH
   0x34–0x37   Pressure, uint32, 0.01 hPa
 
-Block 3 (0x38–0x3F)   DS3231M – RTC
+Block 3 (0x38–0x3F)   DS3231M: RTC
   0x38–0x3B   Timestamp, uint32, Unix time (seconds since 1970-01-01 UTC)
   0x3C–0x3D   Temperature, int16, 0.01 °C
   0x3E–0x3F   Reserved
@@ -699,7 +699,7 @@ Block 3:  Reserved, Magic=0x4E, CRC=[computed], I²C address=0x00 (unassigned)
 
 Block 2 keeps the format of the existing 8-byte Schema 0 EEPROM serial number (board type, group ID, unique ID, FirmwareID) with no data loss, but not its location: Schema 0 wrote those 8 bytes at the very end of EEPROM, which under Schema 1 is Block 3 (reserved, magic, CRC, address), while Block 2 sits 8 bytes earlier at Page 0 offset 0x10–0x17. A logger library that reads its serial number from the last 8 bytes therefore reads Block 3 once the board is provisioned. Your library must instead read Page 0 (schema byte 0x01, magic, CRC) and take the serial number from Block 2, falling back to the old location when the schema byte is not 0x01. The board type encoding (`'M'` = 0x4D high byte, revision index low byte) already followed the Schema 1 convention before the spec was written.
 
-#### Page 1 (0x20–0x3F) – Logger status – HYPOTHETICAL
+#### Page 1 (0x20–0x3F): Logger status – HYPOTHETICAL
 
 If Margay ever gains an I²C peripheral interface, `0x4D` (ASCII `'M'`) is the natural address. The layout below exposes the data a higher-level device would most need: current time, battery state, onboard environment, and logger status. Its subsystem table follows the same index rules as a sensor's chip table:
 
@@ -719,12 +719,12 @@ Block 1 (0x28–0x2F)   Battery
   0x29–0x2A   Battery voltage, uint16, 0.01 V
   0x2B–0x2F   Reserved
 
-Block 2 (0x30–0x37)   BME280 – onboard environment
+Block 2 (0x30–0x37)   BME280: onboard environment
   0x30–0x31   Temperature, int16, 0.01 °C
   0x32–0x33   Humidity, uint16, 0.01 %RH
   0x34–0x37   Pressure, uint32, 0.01 hPa
 
-Block 3 (0x38–0x3F)   DS3231M – RTC
+Block 3 (0x38–0x3F)   DS3231M: RTC
   0x38–0x3B   Timestamp, uint32, Unix time (seconds since 1970-01-01 UTC)
   0x3C–0x3D   Temperature, int16, 0.01 °C
   0x3E–0x3F   Reserved
