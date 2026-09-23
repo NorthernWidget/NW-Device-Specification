@@ -264,7 +264,7 @@ Walrus and Haar should copy this shape; what is identical across the three becom
 3. Names: `joinInt16` vs `loadInt16`; `appendValue`; `requestReading` vs `startReading`.
 4. First pass on Walrus: library with `trigger` omitted first (works against today's free-running firmware), or firmware trigger in the same series?
 5. Report-all row layout: one wide line per logging event, or one line per reading with a sensor label.
-6. Whether the triad is required on every sensor library (it costs ~5 lines once arrays exist; my recommendation: yes, uniformly).
+6. ~~Whether the triad is required on every sensor library~~ – decided 2026-09-23 (Andy): yes, every library, and with it N readings per chip group with the statistics; the statistics (`NW_Readings`) and the batch mechanics (`NW_Device::beginBatch`, `writeBatch`, `batchFaulted`) live in NW_Core, the loop and the field-named accessors in each library (§0). Walrus and Haar follow Apis; capacity defaults 16 per chip group (proposal; Apis keeps 64/8).
 7. Header string format (separators, trailing comma) – explicitly deferred by Andy.
 8. ~~Apis statistics columns~~ – decided 2026-09-21, see §3a.
 
